@@ -6,8 +6,10 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { UserPlus, User } from "lucide-react";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { UserPlus, User, Eye } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
+import { useToast } from "@/components/ui/use-toast";
 import type { Employee as DBEmployee, EmployeeEvaluation } from "@/types/database";
 import type { Employee, SAWResult } from "@/pages/Index";
 
@@ -20,6 +22,11 @@ export const EmployeeForm = ({ onAddEmployee, employees }: EmployeeFormProps) =>
   const [dbEmployees, setDbEmployees] = useState<DBEmployee[]>([]);
   const [evaluations, setEvaluations] = useState<EmployeeEvaluation[]>([]);
   const [selectedEmployeeId, setSelectedEmployeeId] = useState<string>("");
+  const [selectedEmployeeForDetail, setSelectedEmployeeForDetail] = useState<Employee | null>(null);
+  const [isDetailDialogOpen, setIsDetailDialogOpen] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const { toast } = useToast();
+  
   const [formData, setFormData] = useState({
     kualitasKerja: 1,
     tanggungJawab: 1,
@@ -37,27 +44,55 @@ export const EmployeeForm = ({ onAddEmployee, employees }: EmployeeFormProps) =>
   });
 
   const fetchEmployees = async () => {
-    const { data, error } = await supabase
-      .from('employees')
-      .select('*')
-      .order('name', { ascending: true });
-    
-    if (error) {
-      console.error('Error fetching employees:', error);
-    } else {
-      setDbEmployees(data || []);
+    setLoading(true);
+    try {
+      const { data, error } = await supabase
+        .from('employees')
+        .select('*')
+        .order('name', { ascending: true });
+      
+      if (error) {
+        console.error('Error fetching employees:', error);
+        toast({
+          title: "Error",
+          description: "Gagal mengambil data karyawan dari database",
+          variant: "destructive",
+        });
+      } else {
+        setDbEmployees(data || []);
+        console.log('Employees fetched successfully:', data?.length || 0);
+      }
+    } catch (error) {
+      console.error('Network error fetching employees:', error);
+      toast({
+        title: "Error",
+        description: "Gagal terhubung ke database",
+        variant: "destructive",
+      });
+    } finally {
+      setLoading(false);
     }
   };
 
   const fetchEvaluations = async () => {
-    const { data, error } = await supabase
-      .from('employee_evaluations')
-      .select('*');
-    
-    if (error) {
-      console.error('Error fetching evaluations:', error);
-    } else {
-      setEvaluations(data || []);
+    try {
+      const { data, error } = await supabase
+        .from('employee_evaluations')
+        .select('*');
+      
+      if (error) {
+        console.error('Error fetching evaluations:', error);
+        toast({
+          title: "Error",
+          description: "Gagal mengambil data evaluasi dari database",
+          variant: "destructive",
+        });
+      } else {
+        setEvaluations(data || []);
+        console.log('Evaluations fetched successfully:', data?.length || 0);
+      }
+    } catch (error) {
+      console.error('Network error fetching evaluations:', error);
     }
   };
 
@@ -73,6 +108,7 @@ export const EmployeeForm = ({ onAddEmployee, employees }: EmployeeFormProps) =>
     const selectedEmployee = dbEmployees.find(emp => emp.id === selectedEmployeeId);
     if (!selectedEmployee) return;
 
+    setLoading(true);
     try {
       // Save to database
       const { data, error } = await supabase
@@ -137,9 +173,21 @@ export const EmployeeForm = ({ onAddEmployee, employees }: EmployeeFormProps) =>
         suratPeringatan: 0
       });
 
+      toast({
+        title: "Berhasil",
+        description: "Data evaluasi karyawan berhasil disimpan",
+      });
+
       fetchEvaluations();
     } catch (error) {
       console.error('Error saving evaluation:', error);
+      toast({
+        title: "Error",
+        description: "Gagal menyimpan data evaluasi",
+        variant: "destructive",
+      });
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -148,6 +196,11 @@ export const EmployeeForm = ({ onAddEmployee, employees }: EmployeeFormProps) =>
       ...prev,
       [field]: value
     }));
+  };
+
+  const handleEmployeeDetailClick = (employee: Employee) => {
+    setSelectedEmployeeForDetail(employee);
+    setIsDetailDialogOpen(true);
   };
 
   // Get evaluated employee IDs
@@ -170,8 +223,18 @@ export const EmployeeForm = ({ onAddEmployee, employees }: EmployeeFormProps) =>
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
               {employees.map((employee) => (
-                <div key={employee.id} className="p-4 border rounded-lg bg-gray-50">
-                  <h4 className="font-semibold text-gray-800">{employee.name}</h4>
+                <div key={employee.id} className="p-4 border rounded-lg bg-gray-50 relative">
+                  <div className="flex justify-between items-start">
+                    <h4 className="font-semibold text-gray-800">{employee.name}</h4>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => handleEmployeeDetailClick(employee)}
+                      className="h-8 w-8 p-0"
+                    >
+                      <Eye className="h-4 w-4" />
+                    </Button>
+                  </div>
                   <div className="mt-2 space-y-1 text-sm text-gray-600">
                     <p>Kualitas Kerja: {employee.kualitasKerja}/5</p>
                     <p>Tanggung Jawab: {employee.tanggungJawab}/5</p>
@@ -192,6 +255,95 @@ export const EmployeeForm = ({ onAddEmployee, employees }: EmployeeFormProps) =>
         </CardContent>
       </Card>
 
+      {/* Employee Detail Dialog */}
+      <Dialog open={isDetailDialogOpen} onOpenChange={setIsDetailDialogOpen}>
+        <DialogContent className="max-w-2xl">
+          <DialogHeader>
+            <DialogTitle>Detail Evaluasi Karyawan</DialogTitle>
+          </DialogHeader>
+          {selectedEmployeeForDetail && (
+            <div className="space-y-6">
+              <div className="text-center">
+                <h3 className="text-xl font-semibold">{selectedEmployeeForDetail.name}</h3>
+              </div>
+              
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="space-y-3">
+                  <h4 className="font-semibold text-green-700">Kinerja Inti</h4>
+                  <div className="space-y-2 text-sm">
+                    <div className="flex justify-between">
+                      <span>Kualitas Kerja:</span>
+                      <span className="font-medium">{selectedEmployeeForDetail.kualitasKerja}/5</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span>Tanggung Jawab:</span>
+                      <span className="font-medium">{selectedEmployeeForDetail.tanggungJawab}/5</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span>Kuantitas Kerja:</span>
+                      <span className="font-medium">{selectedEmployeeForDetail.kuantitasKerja}/5</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span>Pemahaman Tugas:</span>
+                      <span className="font-medium">{selectedEmployeeForDetail.pemahamanTugas}/5</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span>Inisiatif:</span>
+                      <span className="font-medium">{selectedEmployeeForDetail.inisiatif}/5</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span>Kerjasama:</span>
+                      <span className="font-medium">{selectedEmployeeForDetail.kerjasama}/5</span>
+                    </div>
+                  </div>
+                </div>
+                
+                <div className="space-y-3">
+                  <h4 className="font-semibold text-orange-600">Kedisiplinan</h4>
+                  <div className="space-y-2 text-sm">
+                    <div className="flex justify-between">
+                      <span>Hari Alpa:</span>
+                      <span className="font-medium">{selectedEmployeeForDetail.hariAlpa} hari</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span>Keterlambatan:</span>
+                      <span className="font-medium">{selectedEmployeeForDetail.keterlambatan} kali</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span>Hari Izin:</span>
+                      <span className="font-medium">{selectedEmployeeForDetail.hariIzin} hari</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span>Hari Sakit:</span>
+                      <span className="font-medium">{selectedEmployeeForDetail.hariSakit} hari</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span>Pulang Cepat:</span>
+                      <span className="font-medium">{selectedEmployeeForDetail.pulangCepat} kali</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+              
+              <div className="border-t pt-4">
+                <h4 className="font-semibold text-blue-600 mb-3">Faktor Tambahan</h4>
+                <div className="flex gap-4">
+                  {selectedEmployeeForDetail.prestasi === 1 && (
+                    <Badge variant="default">Memiliki Prestasi</Badge>
+                  )}
+                  {selectedEmployeeForDetail.suratPeringatan === 1 && (
+                    <Badge variant="destructive">Surat Peringatan</Badge>
+                  )}
+                  {selectedEmployeeForDetail.prestasi === 0 && selectedEmployeeForDetail.suratPeringatan === 0 && (
+                    <span className="text-gray-500">Tidak ada faktor tambahan</span>
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
+
       {/* Add New Employee Evaluation Form */}
       <Card className="bg-white shadow-lg">
         <CardHeader>
@@ -201,18 +353,25 @@ export const EmployeeForm = ({ onAddEmployee, employees }: EmployeeFormProps) =>
           </CardTitle>
         </CardHeader>
         <CardContent>
+          {loading && (
+            <div className="text-center py-4">
+              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-green-600 mx-auto mb-2"></div>
+              <p className="text-gray-600">Memuat data...</p>
+            </div>
+          )}
+          
           <form onSubmit={handleSubmit} className="space-y-6">
             {/* Employee Selection */}
             <div>
               <Label htmlFor="employee">Pilih Karyawan</Label>
-              <Select value={selectedEmployeeId} onValueChange={setSelectedEmployeeId}>
+              <Select value={selectedEmployeeId} onValueChange={setSelectedEmployeeId} disabled={loading}>
                 <SelectTrigger>
                   <SelectValue placeholder="Pilih karyawan untuk dievaluasi" />
                 </SelectTrigger>
                 <SelectContent>
                   {availableEmployees.length === 0 ? (
                     <div className="p-2 text-center text-gray-500">
-                      Semua karyawan sudah dievaluasi
+                      {loading ? "Memuat..." : "Semua karyawan sudah dievaluasi"}
                     </div>
                   ) : (
                     availableEmployees.map((employee) => (
@@ -389,10 +548,10 @@ export const EmployeeForm = ({ onAddEmployee, employees }: EmployeeFormProps) =>
                 <Button 
                   type="submit" 
                   className="w-full bg-green-600 hover:bg-green-700"
-                  disabled={!selectedEmployeeId}
+                  disabled={!selectedEmployeeId || loading}
                 >
                   <UserPlus className="w-4 h-4 mr-2" />
-                  Tambah Evaluasi Karyawan
+                  {loading ? "Menyimpan..." : "Tambah Evaluasi Karyawan"}
                 </Button>
               </>
             )}
