@@ -9,7 +9,140 @@ export type Json =
 export type Database = {
   public: {
     Tables: {
-      [_ in never]: never
+      criteria: {
+        Row: {
+          category: string
+          created_at: string
+          id: string
+          name: string
+          scale: string
+          type: string
+          updated_at: string
+          weight: number
+        }
+        Insert: {
+          category: string
+          created_at?: string
+          id?: string
+          name: string
+          scale: string
+          type: string
+          updated_at?: string
+          weight: number
+        }
+        Update: {
+          category?: string
+          created_at?: string
+          id?: string
+          name?: string
+          scale?: string
+          type?: string
+          updated_at?: string
+          weight?: number
+        }
+        Relationships: []
+      }
+      employee_evaluations: {
+        Row: {
+          created_at: string
+          employee_id: string
+          hari_alpa: number
+          hari_izin: number
+          hari_sakit: number
+          id: string
+          inisiatif: number
+          kerjasama: number
+          keterlambatan: number
+          kualitas_kerja: number
+          kuantitas_kerja: number
+          pemahaman_tugas: number
+          prestasi: number
+          pulang_cepat: number
+          surat_peringatan: number
+          tanggung_jawab: number
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          employee_id: string
+          hari_alpa?: number
+          hari_izin?: number
+          hari_sakit?: number
+          id?: string
+          inisiatif: number
+          kerjasama: number
+          keterlambatan?: number
+          kualitas_kerja: number
+          kuantitas_kerja: number
+          pemahaman_tugas: number
+          prestasi?: number
+          pulang_cepat?: number
+          surat_peringatan?: number
+          tanggung_jawab: number
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          employee_id?: string
+          hari_alpa?: number
+          hari_izin?: number
+          hari_sakit?: number
+          id?: string
+          inisiatif?: number
+          kerjasama?: number
+          keterlambatan?: number
+          kualitas_kerja?: number
+          kuantitas_kerja?: number
+          pemahaman_tugas?: number
+          prestasi?: number
+          pulang_cepat?: number
+          surat_peringatan?: number
+          tanggung_jawab?: number
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "employee_evaluations_employee_id_fkey"
+            columns: ["employee_id"]
+            isOneToOne: false
+            referencedRelation: "employees"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      employees: {
+        Row: {
+          created_at: string
+          department: string
+          email: string
+          hire_date: string
+          id: string
+          name: string
+          position: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          department: string
+          email: string
+          hire_date: string
+          id?: string
+          name: string
+          position: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          department?: string
+          email?: string
+          hire_date?: string
+          id?: string
+          name?: string
+          position?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never

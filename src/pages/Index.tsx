@@ -1,4 +1,3 @@
-
 import { useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -11,6 +10,8 @@ import { EmployeeForm } from "@/components/EmployeeForm";
 import { SAWCalculator } from "@/components/SAWCalculator";
 import { ResultsDisplay } from "@/components/ResultsDisplay";
 import { CriteriaTable } from "@/components/CriteriaTable";
+import { CriteriaManagement } from "@/components/CriteriaManagement";
+import { EmployeeManagement } from "@/components/EmployeeManagement";
 
 export interface Employee {
   id: string;
@@ -174,8 +175,10 @@ const Index = () => {
 
         {/* Main Content */}
         <Tabs defaultValue="criteria" className="w-full">
-          <TabsList className="grid w-full grid-cols-4 mb-6">
+          <TabsList className="grid w-full grid-cols-6 mb-6">
             <TabsTrigger value="criteria">Kriteria & Bobot</TabsTrigger>
+            <TabsTrigger value="criteria-crud">Kelola Kriteria</TabsTrigger>
+            <TabsTrigger value="employees">Kelola Karyawan</TabsTrigger>
             <TabsTrigger value="input">Input Data</TabsTrigger>
             <TabsTrigger value="calculate">Perhitungan SAW</TabsTrigger>
             <TabsTrigger value="results">Hasil & Rekomendasi</TabsTrigger>
@@ -183,6 +186,14 @@ const Index = () => {
 
           <TabsContent value="criteria">
             <CriteriaTable />
+          </TabsContent>
+
+          <TabsContent value="criteria-crud">
+            <CriteriaManagement />
+          </TabsContent>
+
+          <TabsContent value="employees">
+            <EmployeeManagement />
           </TabsContent>
 
           <TabsContent value="input">

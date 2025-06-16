@@ -1,37 +1,40 @@
 
+import { useState, useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { TrendingUp, TrendingDown } from "lucide-react";
-
-const criteria = [
-  // Kinerja Inti (60%)
-  { name: "Kualitas Kerja", type: "Benefit", weight: "15%", category: "A. Kinerja Inti", scale: "1-5" },
-  { name: "Tanggung Jawab", type: "Benefit", weight: "15%", category: "A. Kinerja Inti", scale: "1-5" },
-  { name: "Kuantitas Kerja", type: "Benefit", weight: "10%", category: "A. Kinerja Inti", scale: "1-5" },
-  { name: "Pemahaman Tugas", type: "Benefit", weight: "10%", category: "A. Kinerja Inti", scale: "1-5" },
-  { name: "Inisiatif", type: "Benefit", weight: "5%", category: "A. Kinerja Inti", scale: "1-5" },
-  { name: "Kerjasama", type: "Benefit", weight: "5%", category: "A. Kinerja Inti", scale: "1-5" },
-  
-  // Kedisiplinan (25%)
-  { name: "Jumlah Hari Alpa", type: "Cost", weight: "10%", category: "B. Kedisiplinan", scale: "Hari" },
-  { name: "Jumlah Keterlambatan", type: "Cost", weight: "7%", category: "B. Kedisiplinan", scale: "Kali" },
-  { name: "Jumlah Hari Izin", type: "Cost", weight: "3%", category: "B. Kedisiplinan", scale: "Hari" },
-  { name: "Jumlah Hari Sakit", type: "Cost", weight: "3%", category: "B. Kedisiplinan", scale: "Hari" },
-  { name: "Pulang Cepat", type: "Cost", weight: "2%", category: "B. Kedisiplinan", scale: "Kali" },
-  
-  // Faktor Tambahan (15%)
-  { name: "Prestasi", type: "Benefit", weight: "10%", category: "C. Faktor Tambahan", scale: "0/1" },
-  { name: "Surat Peringatan", type: "Cost", weight: "5%", category: "C. Faktor Tambahan", scale: "0/1" },
-];
+import { supabase } from "@/integrations/supabase/client";
+import type { Criteria } from "@/types/database";
 
 export const CriteriaTable = () => {
+  const [criteria, setCriteria] = useState<Criteria[]>([]);
+
+  const fetchCriteria = async () => {
+    const { data, error } = await supabase
+      .from('criteria')
+      .select('*')
+      .order('category', { ascending: true });
+    
+    if (error) {
+      console.error('Error fetching criteria:', error);
+    } else {
+      setCriteria(data || []);
+    }
+  };
+
+  useEffect(() => {
+    fetchCriteria();
+  }, []);
+
   const groupedCriteria = criteria.reduce((acc, criterion) => {
     if (!acc[criterion.category]) {
       acc[criterion.category] = [];
     }
     acc[criterion.category].push(criterion);
     return acc;
-  }, {} as Record<string, typeof criteria>);
+  }, {} as Record<string, Criteria[]>);
+
+  const totalWeight = criteria.reduce((sum, criterion) => sum + Number(criterion.weight), 0);
 
   return (
     <div className="space-y-6">
@@ -41,7 +44,7 @@ export const CriteriaTable = () => {
             Kriteria dan Pembobotan Evaluasi Kinerja
           </CardTitle>
           <p className="text-gray-600">
-            Sistem evaluasi menggunakan 13 kriteria dengan total bobot 100%
+            Sistem evaluasi menggunakan {criteria.length} kriteria dengan total bobot {totalWeight.toFixed(2)}%
           </p>
         </CardHeader>
         <CardContent>
@@ -61,8 +64,8 @@ export const CriteriaTable = () => {
                       </tr>
                     </thead>
                     <tbody>
-                      {criteriaList.map((criterion, index) => (
-                        <tr key={index} className="border-b hover:bg-white transition-colors">
+                      {criteriaList.map((criterion) => (
+                        <tr key={criterion.id} className="border-b hover:bg-white transition-colors">
                           <td className="py-3 px-4 font-medium">{criterion.name}</td>
                           <td className="py-3 px-4">
                             <Badge 
@@ -78,7 +81,7 @@ export const CriteriaTable = () => {
                             </Badge>
                           </td>
                           <td className="py-3 px-4 font-semibold text-green-600">
-                            {criterion.weight}
+                            {criterion.weight}%
                           </td>
                           <td className="py-3 px-4">{criterion.scale}</td>
                           <td className="py-3 px-4 text-sm text-gray-600">
@@ -97,11 +100,11 @@ export const CriteriaTable = () => {
           </div>
           
           <div className="mt-6 p-4 bg-blue-50 rounded-lg">
-            <h4 className="font-semibold text-blue-800 mb-2">Catatan Penting:</h4>
+            <h4 className="font-semibold text-blue-800 mb-2">Total Bobot: {totalWeight.toFixed(2)}%</h4>
             <ul className="text-sm text-blue-700 space-y-1">
               <li>• <strong>Benefit:</strong> Nilai yang lebih tinggi menunjukkan kinerja yang lebih baik</li>
               <li>• <strong>Cost:</strong> Nilai yang lebih rendah menunjukkan kinerja yang lebih baik</li>
-              <li>• Total bobot keseluruhan adalah 100%</li>
+              <li>• {totalWeight === 100 ? 'Total bobot sudah seimbang (100%)' : `⚠️ Total bobot belum seimbang (${totalWeight.toFixed(2)}%)`}</li>
               <li>• Nilai minimum untuk rekomendasi perpanjangan kontrak adalah 3.0</li>
             </ul>
           </div>
