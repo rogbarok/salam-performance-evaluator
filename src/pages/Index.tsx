@@ -12,6 +12,7 @@ import { ResultsDisplay } from "@/components/ResultsDisplay";
 import { CriteriaTable } from "@/components/CriteriaTable";
 import { CriteriaManagement } from "@/components/CriteriaManagement";
 import { EmployeeManagement } from "@/components/EmployeeManagement";
+import { Navbar } from "@/components/Navbar";
 
 export interface Employee {
   id: string;
@@ -108,6 +109,7 @@ const Index = () => {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-green-50 to-blue-50">
+      <Navbar />
       <div className="container mx-auto p-6">
         {/* Header */}
         <div className="text-center mb-8">

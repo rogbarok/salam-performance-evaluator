@@ -1,6 +1,7 @@
 
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { Trophy, TrendingUp, AlertTriangle, CheckCircle } from "lucide-react";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, PieChart, Pie, Cell } from "recharts";
 import type { SAWResult } from "@/pages/Index";
@@ -10,6 +11,196 @@ interface ResultsDisplayProps {
 }
 
 export const ResultsDisplay = ({ results }: ResultsDisplayProps) => {
+  const handlePrint = () => {
+    const printContent = document.getElementById('results-content');
+    if (!printContent) return;
+
+    const printWindow = window.open('', '_blank');
+    if (!printWindow) return;
+
+    printWindow.document.write(`
+      <!DOCTYPE html>
+      <html>
+        <head>
+          <title>Hasil Evaluasi Kinerja Karyawan</title>
+          <style>
+            body { 
+              font-family: Arial, sans-serif; 
+              margin: 20px; 
+              line-height: 1.4;
+            }
+            .header { 
+              text-align: center; 
+              margin-bottom: 30px; 
+              border-bottom: 2px solid #22c55e;
+              padding-bottom: 20px;
+            }
+            .header h1 { 
+              color: #1f2937; 
+              margin-bottom: 5px;
+            }
+            .header h2 { 
+              color: #22c55e; 
+              margin-bottom: 5px;
+            }
+            .summary { 
+              margin-bottom: 30px; 
+              background: #f9fafb;
+              padding: 15px;
+              border-radius: 8px;
+            }
+            .summary-grid {
+              display: grid;
+              grid-template-columns: repeat(4, 1fr);
+              gap: 15px;
+              margin-bottom: 15px;
+            }
+            .summary-card {
+              text-align: center;
+              padding: 10px;
+              background: white;
+              border-radius: 6px;
+              border: 1px solid #e5e7eb;
+            }
+            .summary-card h3 {
+              margin: 0 0 5px 0;
+              font-size: 24px;
+              font-weight: bold;
+            }
+            .summary-card p {
+              margin: 0;
+              font-size: 12px;
+              color: #6b7280;
+            }
+            table { 
+              width: 100%; 
+              border-collapse: collapse; 
+              margin-bottom: 30px;
+            }
+            th, td { 
+              border: 1px solid #ddd; 
+              padding: 8px; 
+              text-align: left; 
+            }
+            th { 
+              background-color: #22c55e; 
+              color: white; 
+              font-weight: bold;
+            }
+            .rank-1 { 
+              background-color: #fef3c7; 
+            }
+            .badge {
+              padding: 2px 6px;
+              border-radius: 4px;
+              font-size: 10px;
+              font-weight: bold;
+            }
+            .badge-success { background: #22c55e; color: white; }
+            .badge-warning { background: #f59e0b; color: white; }
+            .badge-danger { background: #ef4444; color: white; }
+            .badge-secondary { background: #6b7280; color: white; }
+            .analysis {
+              margin-top: 30px;
+              background: #f0f9ff;
+              padding: 15px;
+              border-radius: 8px;
+            }
+            @media print {
+              body { margin: 0; }
+              .no-print { display: none; }
+            }
+          </style>
+        </head>
+        <body>
+          <div class="header">
+            <h1>Hasil Evaluasi Kinerja Karyawan</h1>
+            <h2>Yayasan As-Salam</h2>
+            <p>Metode Simple Additive Weighting (SAW)</p>
+            <p>Tanggal: ${new Date().toLocaleDateString('id-ID')}</p>
+          </div>
+          
+          <div class="summary">
+            <h3>Ringkasan Evaluasi</h3>
+            <div class="summary-grid">
+              <div class="summary-card">
+                <h3>${results.filter(r => r.recommendation === "Dapat diperpanjang").length}</h3>
+                <p>Dapat Diperpanjang</p>
+              </div>
+              <div class="summary-card">
+                <h3>${results.filter(r => r.recommendation === "Diberhentikan").length}</h3>
+                <p>Diberhentikan</p>
+              </div>
+              <div class="summary-card">
+                <h3>${results.filter(r => r.note === "Kandidat promosi").length}</h3>
+                <p>Kandidat Promosi</p>
+              </div>
+              <div class="summary-card">
+                <h3>${(results.reduce((sum, r) => sum + r.convertedScore, 0) / results.length).toFixed(1)}</h3>
+                <p>Rata-rata Skor</p>
+              </div>
+            </div>
+            <ul>
+              <li>Total karyawan dievaluasi: <strong>${results.length} orang</strong></li>
+              <li>Rata-rata skor: <strong>${(results.reduce((sum, r) => sum + r.convertedScore, 0) / results.length).toFixed(2)}</strong></li>
+              <li>Persentase lulus standar minimum (≥3.0): <strong>${((results.filter(r => r.convertedScore >= 3).length / results.length) * 100).toFixed(1)}%</strong></li>
+              <li>Kandidat promosi: <strong>${results.filter(r => r.note === "Kandidat promosi").length} orang</strong></li>
+            </ul>
+          </div>
+
+          <table>
+            <thead>
+              <tr>
+                <th>Rank</th>
+                <th>Nama Karyawan</th>
+                <th>Skor SAW</th>
+                <th>Skor Konversi</th>
+                <th>Kategori</th>
+                <th>Rekomendasi</th>
+                <th>Catatan</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${results.map((result, index) => `
+                <tr class="${index === 0 ? 'rank-1' : ''}">
+                  <td>#${result.rank}${result.rank === 1 ? ' 🏆' : ''}</td>
+                  <td><strong>${result.employee.name}</strong></td>
+                  <td>${result.finalScore.toFixed(4)}</td>
+                  <td><span class="badge ${result.convertedScore >= 4 ? 'badge-success' : result.convertedScore >= 3 ? 'badge-warning' : 'badge-danger'}">${result.convertedScore.toFixed(1)}</span></td>
+                  <td>${result.convertedScore >= 4.5 ? "Sangat Baik" : result.convertedScore >= 3.5 ? "Baik" : result.convertedScore >= 2.5 ? "Cukup" : result.convertedScore >= 1.5 ? "Kurang" : "Sangat Kurang"}</td>
+                  <td><span class="badge ${result.recommendation === "Dapat diperpanjang" ? 'badge-success' : 'badge-danger'}">${result.recommendation}</span></td>
+                  <td>${result.note ? `<span class="badge ${result.note === "Kandidat promosi" ? 'badge-success' : 'badge-danger'}">${result.note}</span>` : '-'}</td>
+                </tr>
+              `).join('')}
+            </tbody>
+          </table>
+
+          <div class="analysis">
+            <h3>Karyawan Terbaik (Top 3)</h3>
+            ${results.slice(0, 3).map((result, index) => `
+              <p><strong>#${result.rank} ${result.employee.name}</strong> - Skor: ${result.convertedScore.toFixed(1)}</p>
+            `).join('')}
+            
+            ${results.filter(r => r.convertedScore < 3).length > 0 ? `
+              <h3>Perlu Perbaikan</h3>
+              ${results.filter(r => r.convertedScore < 3).map((result) => `
+                <p><strong>#${result.rank} ${result.employee.name}</strong> - Skor: ${result.convertedScore.toFixed(1)}</p>
+              `).join('')}
+            ` : '<p><em>Semua karyawan memenuhi standar minimum</em></p>'}
+          </div>
+        </body>
+      </html>
+    `);
+
+    printWindow.document.close();
+    printWindow.focus();
+    
+    setTimeout(() => {
+      printWindow.print();
+      printWindow.close();
+    }, 250);
+  };
+
   if (results.length === 0) {
     return (
       <Card className="bg-white shadow-lg">
@@ -49,7 +240,20 @@ export const ResultsDisplay = ({ results }: ResultsDisplayProps) => {
   };
 
   return (
-    <div className="space-y-6">
+    <div id="results-content" className="space-y-6">
+      {/* Print Button */}
+      <div className="flex justify-end mb-4">
+        <Button 
+          onClick={handlePrint}
+          className="bg-blue-600 hover:bg-blue-700 text-white print:hidden"
+        >
+          <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z" />
+          </svg>
+          Cetak Hasil
+        </Button>
+      </div>
+
       {/* Summary Cards */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
         <Card className="bg-gradient-to-r from-green-500 to-green-600 text-white">
