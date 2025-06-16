@@ -1,0 +1,387 @@
+
+import { useState, useEffect } from "react";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import { Calculator, Play } from "lucide-react";
+import type { Employee, SAWResult } from "@/pages/Index";
+
+interface SAWCalculatorProps {
+  employees: Employee[];
+  onCalculate: (results: SAWResult[]) => void;
+}
+
+// Weights for each criterion (total = 100%)
+const weights = {
+  kualitasKerja: 0.15,      // 15%
+  tanggungJawab: 0.15,      // 15%
+  kuantitasKerja: 0.10,     // 10%
+  pemahamanTugas: 0.10,     // 10%
+  inisiatif: 0.05,          // 5%
+  kerjasama: 0.05,          // 5%
+  hariAlpa: 0.10,           // 10%
+  keterlambatan: 0.07,      // 7%
+  hariIzin: 0.03,           // 3%
+  hariSakit: 0.03,          // 3%
+  pulangCepat: 0.02,        // 2%
+  prestasi: 0.10,           // 10%
+  suratPeringatan: 0.05     // 5%
+};
+
+const benefitCriteria = ['kualitasKerja', 'tanggungJawab', 'kuantitasKerja', 'pemahamanTugas', 'inisiatif', 'kerjasama', 'prestasi'];
+const costCriteria = ['hariAlpa', 'keterlambatan', 'hariIzin', 'hariSakit', 'pulangCepat', 'suratPeringatan'];
+
+export const SAWCalculator = ({ employees, onCalculate }: SAWCalculatorProps) => {
+  const [decisionMatrix, setDecisionMatrix] = useState<number[][]>([]);
+  const [normalizedMatrix, setNormalizedMatrix] = useState<number[][]>([]);
+  const [finalScores, setFinalScores] = useState<SAWResult[]>([]);
+  const [isCalculated, setIsCalculated] = useState(false);
+
+  const calculateSAW = () => {
+    if (employees.length === 0) return;
+
+    console.log("Starting SAW calculation for employees:", employees);
+
+    // Step 1: Create decision matrix
+    const matrix = employees.map(emp => [
+      emp.kualitasKerja,
+      emp.tanggungJawab, 
+      emp.kuantitasKerja,
+      emp.pemahamanTugas,
+      emp.inisiatif,
+      emp.kerjasama,
+      emp.hariAlpa,
+      emp.keterlambatan,
+      emp.hariIzin,
+      emp.hariSakit,
+      emp.pulangCepat,
+      emp.prestasi,
+      emp.suratPeringatan
+    ]);
+
+    console.log("Decision Matrix:", matrix);
+    setDecisionMatrix(matrix);
+
+    // Step 2: Normalize matrix
+    const criteriaKeys = Object.keys(weights);
+    const normalized = matrix.map(() => new Array(criteriaKeys.length).fill(0));
+
+    for (let j = 0; j < criteriaKeys.length; j++) {
+      const criterion = criteriaKeys[j];
+      const columnValues = matrix.map(row => row[j]);
+      
+      if (benefitCriteria.includes(criterion)) {
+        // For benefit criteria: Rij = Xij / max(Xij)
+        const maxValue = Math.max(...columnValues);
+        if (maxValue > 0) {
+          for (let i = 0; i < matrix.length; i++) {
+            normalized[i][j] = matrix[i][j] / maxValue;
+          }
+        }
+      } else {
+        // For cost criteria: Rij = min(Xij) / Xij
+        const minValue = Math.min(...columnValues.filter(val => val > 0));
+        if (minValue > 0) {
+          for (let i = 0; i < matrix.length; i++) {
+            normalized[i][j] = matrix[i][j] === 0 ? 1 : minValue / matrix[i][j];
+          }
+        }
+      }
+    }
+
+    console.log("Normalized Matrix:", normalized);
+    setNormalizedMatrix(normalized);
+
+    // Step 3: Calculate final scores
+    const weightValues = Object.values(weights);
+    const results: SAWResult[] = employees.map((employee, index) => {
+      const normalizedScores = normalized[index];
+      const finalScore = normalizedScores.reduce((sum, score, j) => {
+        return sum + (score * weightValues[j]);
+      }, 0);
+
+      // Convert to 1-5 scale
+      const convertedScore = convertScore(finalScore);
+      
+      // Generate recommendation
+      const { recommendation, note } = getRecommendation(convertedScore);
+
+      return {
+        employee,
+        normalizedScores,
+        finalScore,
+        convertedScore,
+        rank: 0, // Will be set after sorting
+        recommendation,
+        note
+      };
+    });
+
+    // Step 4: Rank employees
+    results.sort((a, b) => b.finalScore - a.finalScore);
+    results.forEach((result, index) => {
+      result.rank = index + 1;
+    });
+
+    console.log("Final Results:", results);
+    setFinalScores(results);
+    setIsCalculated(true);
+    onCalculate(results);
+  };
+
+  const convertScore = (sawScore: number): number => {
+    // Convert SAW score (0-1) to 1-5 scale
+    if (sawScore >= 0.85) return 5;
+    if (sawScore >= 0.70) return 4;
+    if (sawScore >= 0.50) return 3;
+    if (sawScore >= 0.30) return 2;
+    return 1;
+  };
+
+  const getRecommendation = (convertedScore: number): { recommendation: string; note?: string } => {
+    if (convertedScore >= 4.0) {
+      return {
+        recommendation: "Dapat diperpanjang",
+        note: "Kandidat promosi"
+      };
+    } else if (convertedScore >= 3.0) {
+      return {
+        recommendation: "Dapat diperpanjang"
+      };
+    } else {
+      return {
+        recommendation: "Diberhentikan",
+        note: "Tidak memenuhi standar kinerja minimum"
+      };
+    }
+  };
+
+  const getScoreLabel = (score: number): string => {
+    if (score >= 4.5) return "Sangat Baik";
+    if (score >= 3.5) return "Baik";
+    if (score >= 2.5) return "Cukup";
+    if (score >= 1.5) return "Kurang";
+    return "Sangat Kurang";
+  };
+
+  return (
+    <div className="space-y-6">
+      <Card className="bg-white shadow-lg">
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2 text-green-700">
+            <Calculator className="w-5 h-5" />
+            Perhitungan Simple Additive Weighting (SAW)
+          </CardTitle>
+          <p className="text-gray-600">
+            Proses perhitungan otomatis menggunakan metode SAW untuk evaluasi kinerja karyawan
+          </p>
+        </CardHeader>
+        <CardContent>
+          <div className="space-y-4">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm text-gray-600">
+                  Total karyawan: <span className="font-semibold">{employees.length}</span>
+                </p>
+                <p className="text-sm text-gray-600">
+                  Status: {isCalculated ? (
+                    <Badge variant="default" className="ml-1">Sudah dihitung</Badge>
+                  ) : (
+                    <Badge variant="secondary" className="ml-1">Belum dihitung</Badge>
+                  )}
+                </p>
+              </div>
+              <Button 
+                onClick={calculateSAW}
+                disabled={employees.length === 0}
+                className="bg-green-600 hover:bg-green-700"
+              >
+                <Play className="w-4 h-4 mr-2" />
+                Hitung SAW
+              </Button>
+            </div>
+
+            {employees.length === 0 && (
+              <div className="text-center py-8 text-gray-500">
+                <Calculator className="w-12 h-12 mx-auto mb-2 opacity-50" />
+                <p>Tambahkan data karyawan terlebih dahulu untuk memulai perhitungan</p>
+              </div>
+            )}
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Decision Matrix */}
+      {decisionMatrix.length > 0 && (
+        <Card className="bg-white shadow-lg">
+          <CardHeader>
+            <CardTitle className="text-lg text-gray-800">
+              Langkah 1: Matriks Keputusan (X)
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b">
+                    <th className="text-left py-2 px-2">Karyawan</th>
+                    <th className="text-center py-2 px-2">C1</th>
+                    <th className="text-center py-2 px-2">C2</th>
+                    <th className="text-center py-2 px-2">C3</th>
+                    <th className="text-center py-2 px-2">C4</th>
+                    <th className="text-center py-2 px-2">C5</th>
+                    <th className="text-center py-2 px-2">C6</th>
+                    <th className="text-center py-2 px-2">C7</th>
+                    <th className="text-center py-2 px-2">C8</th>
+                    <th className="text-center py-2 px-2">C9</th>
+                    <th className="text-center py-2 px-2">C10</th>
+                    <th className="text-center py-2 px-2">C11</th>
+                    <th className="text-center py-2 px-2">C12</th>
+                    <th className="text-center py-2 px-2">C13</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {employees.map((employee, index) => (
+                    <tr key={employee.id} className="border-b">
+                      <td className="py-2 px-2 font-medium">{employee.name}</td>
+                      {decisionMatrix[index].map((value, j) => (
+                        <td key={j} className="text-center py-2 px-2">{value}</td>
+                      ))}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            <p className="text-xs text-gray-500 mt-2">
+              C1-C6: Kinerja Inti, C7-C11: Kedisiplinan, C12-C13: Faktor Tambahan
+            </p>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Normalized Matrix */}
+      {normalizedMatrix.length > 0 && (
+        <Card className="bg-white shadow-lg">
+          <CardHeader>
+            <CardTitle className="text-lg text-gray-800">
+              Langkah 2: Matriks Ternormalisasi (R)
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="mb-4 p-3 bg-blue-50 rounded-lg text-sm">
+              <p><strong>Rumus Normalisasi:</strong></p>
+              <p>• Benefit: Rij = Xij / max(Xij)</p>
+              <p>• Cost: Rij = min(Xij) / Xij</p>
+            </div>
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b">
+                    <th className="text-left py-2 px-2">Karyawan</th>
+                    <th className="text-center py-2 px-2">C1</th>
+                    <th className="text-center py-2 px-2">C2</th>
+                    <th className="text-center py-2 px-2">C3</th>
+                    <th className="text-center py-2 px-2">C4</th>
+                    <th className="text-center py-2 px-2">C5</th>
+                    <th className="text-center py-2 px-2">C6</th>
+                    <th className="text-center py-2 px-2">C7</th>
+                    <th className="text-center py-2 px-2">C8</th>
+                    <th className="text-center py-2 px-2">C9</th>
+                    <th className="text-center py-2 px-2">C10</th>
+                    <th className="text-center py-2 px-2">C11</th>
+                    <th className="text-center py-2 px-2">C12</th>
+                    <th className="text-center py-2 px-2">C13</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {employees.map((employee, index) => (
+                    <tr key={employee.id} className="border-b">
+                      <td className="py-2 px-2 font-medium">{employee.name}</td>
+                      {normalizedMatrix[index].map((value, j) => (
+                        <td key={j} className="text-center py-2 px-2">
+                          {value.toFixed(3)}
+                        </td>
+                      ))}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Final Scores */}
+      {finalScores.length > 0 && (
+        <Card className="bg-white shadow-lg">
+          <CardHeader>
+            <CardTitle className="text-lg text-gray-800">
+              Langkah 3: Perhitungan Nilai Akhir (V)
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="mb-4 p-3 bg-green-50 rounded-lg text-sm">
+              <p><strong>Rumus:</strong> Vi = Σ(Wj × Rij)</p>
+              <p>Dimana Wj adalah bobot kriteria dan Rij adalah nilai ternormalisasi</p>
+            </div>
+            <div className="overflow-x-auto">
+              <table className="w-full">
+                <thead>
+                  <tr className="border-b">
+                    <th className="text-left py-3 px-4">Rank</th>
+                    <th className="text-left py-3 px-4">Nama</th>
+                    <th className="text-center py-3 px-4">Skor SAW</th>
+                    <th className="text-center py-3 px-4">Skor Konversi</th>
+                    <th className="text-center py-3 px-4">Kategori</th>
+                    <th className="text-left py-3 px-4">Rekomendasi</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {finalScores.map((result) => (
+                    <tr key={result.employee.id} className="border-b hover:bg-gray-50">
+                      <td className="py-3 px-4">
+                        <Badge variant={result.rank === 1 ? "default" : "secondary"}>
+                          #{result.rank}
+                        </Badge>
+                      </td>
+                      <td className="py-3 px-4 font-medium">{result.employee.name}</td>
+                      <td className="text-center py-3 px-4 font-mono">
+                        {result.finalScore.toFixed(4)}
+                      </td>
+                      <td className="text-center py-3 px-4">
+                        <Badge 
+                          variant={result.convertedScore >= 3 ? "default" : "destructive"}
+                          className="font-bold"
+                        >
+                          {result.convertedScore.toFixed(1)}
+                        </Badge>
+                      </td>
+                      <td className="text-center py-3 px-4">
+                        <span className="text-sm text-gray-600">
+                          {getScoreLabel(result.convertedScore)}
+                        </span>
+                      </td>
+                      <td className="py-3 px-4">
+                        <div>
+                          <Badge 
+                            variant={result.recommendation === "Dapat diperpanjang" ? "default" : "destructive"}
+                            className="mb-1"
+                          >
+                            {result.recommendation}
+                          </Badge>
+                          {result.note && (
+                            <p className="text-xs text-gray-600 mt-1">{result.note}</p>
+                          )}
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+    </div>
+  );
+};
