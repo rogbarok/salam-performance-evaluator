@@ -1,3 +1,4 @@
+
 import { useState, useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -210,7 +211,9 @@ export const EmployeeForm = ({ onAddEmployee, employees }: EmployeeFormProps) =>
                 </SelectTrigger>
                 <SelectContent>
                   {availableEmployees.length === 0 ? (
-                    <SelectItem value="" disabled>Semua karyawan sudah dievaluasi</SelectItem>
+                    <div className="p-2 text-center text-gray-500">
+                      Semua karyawan sudah dievaluasi
+                    </div>
                   ) : (
                     availableEmployees.map((employee) => (
                       <SelectItem key={employee.id} value={employee.id}>
