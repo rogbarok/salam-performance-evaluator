@@ -150,7 +150,7 @@ export const EmployeeForm = ({ onAddEmployee, employees }: EmployeeFormProps) =>
   };
 
   // Get evaluated employee IDs
-  const evaluatedEmployeeIds = evaluations.map(eval => eval.employee_id);
+  const evaluatedEmployeeIds = evaluations.map(evaluation => evaluation.employee_id);
   const availableEmployees = dbEmployees.filter(emp => !evaluatedEmployeeIds.includes(emp.id));
 
   return (
