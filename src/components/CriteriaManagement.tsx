@@ -1,3 +1,4 @@
+
 import { useState, useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -8,7 +9,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Plus, Edit, Trash2, Settings } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
-import { useToast } from "@/components/ui/use-toast";
+import { useToast } from "@/hooks/use-toast";
 import type { Criteria } from "@/types/database";
 
 export const CriteriaManagement = () => {
@@ -68,6 +69,17 @@ export const CriteriaManagement = () => {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    
+    // Validate weight is between 0 and 1
+    if (formData.weight < 0 || formData.weight > 1) {
+      toast({
+        title: "Error",
+        description: "Bobot harus antara 0 dan 1",
+        variant: "destructive",
+      });
+      return;
+    }
+
     setLoading(true);
 
     try {

@@ -1,15 +1,4 @@
 
-export interface Criteria {
-  id: string;
-  name: string;
-  type: 'Benefit' | 'Cost';
-  weight: number;
-  category: string;
-  scale: string;
-  created_at: string;
-  updated_at: string;
-}
-
 export interface Employee {
   id: string;
   name: string;
@@ -17,8 +6,19 @@ export interface Employee {
   department: string;
   email: string;
   hire_date: string;
-  created_at: string;
-  updated_at: string;
+  created_at?: string;
+  updated_at?: string;
+}
+
+export interface Criteria {
+  id: string;
+  name: string;
+  type: 'Benefit' | 'Cost';
+  weight: number;
+  category: string;
+  scale: string;
+  created_at?: string;
+  updated_at?: string;
 }
 
 export interface EmployeeEvaluation {
@@ -37,6 +37,7 @@ export interface EmployeeEvaluation {
   pulang_cepat: number;
   prestasi: number;
   surat_peringatan: number;
-  created_at: string;
-  updated_at: string;
+  created_at?: string;
+  updated_at?: string;
+  employees?: Employee;
 }
