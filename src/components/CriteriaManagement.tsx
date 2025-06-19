@@ -1,4 +1,3 @@
-
 import { useState, useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -43,8 +42,13 @@ export const CriteriaManagement = () => {
           variant: "destructive",
         });
       } else {
-        setCriteria(data || []);
-        console.log('Criteria loaded:', data?.length || 0);
+        // Type cast the data to match our Criteria interface
+        const typedCriteria = (data || []).map(item => ({
+          ...item,
+          type: item.type as 'Benefit' | 'Cost'
+        })) as Criteria[];
+        setCriteria(typedCriteria);
+        console.log('Criteria loaded:', typedCriteria.length);
       }
     } catch (error) {
       console.error('Network error:', error);
