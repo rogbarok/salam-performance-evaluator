@@ -7,9 +7,10 @@ import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
-import { UserPlus, User, Eye } from "lucide-react";
+import { UserPlus, User, Eye, Edit } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
+import { EditEmployeeDialog } from "@/components/EditEmployeeDialog";
 import type { Employee as DBEmployee, EmployeeEvaluation } from "@/types/database";
 import type { Employee, SAWResult } from "@/pages/Index";
 
@@ -23,7 +24,9 @@ export const EmployeeForm = ({ onAddEmployee, employees }: EmployeeFormProps) =>
   const [evaluations, setEvaluations] = useState<EmployeeEvaluation[]>([]);
   const [selectedEmployeeId, setSelectedEmployeeId] = useState<string>("");
   const [selectedEmployeeForDetail, setSelectedEmployeeForDetail] = useState<Employee | null>(null);
+  const [selectedEmployeeForEdit, setSelectedEmployeeForEdit] = useState<Employee | null>(null);
   const [isDetailDialogOpen, setIsDetailDialogOpen] = useState(false);
+  const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
   const [loading, setLoading] = useState(false);
   const { toast } = useToast();
   
@@ -220,6 +223,26 @@ export const EmployeeForm = ({ onAddEmployee, employees }: EmployeeFormProps) =>
     setIsDetailDialogOpen(true);
   };
 
+  const handleEmployeeEditClick = (employee: Employee) => {
+    setSelectedEmployeeForEdit(employee);
+    setIsEditDialogOpen(true);
+  };
+
+  const handleEmployeeUpdate = (updatedEmployee: Employee) => {
+    // Update in local state
+    const updatedEmployees = employees.map(emp => 
+      emp.id === updatedEmployee.id ? updatedEmployee : emp
+    );
+    
+    // Notify parent component
+    onAddEmployee(updatedEmployee);
+    
+    toast({
+      title: "Berhasil",
+      description: "Data evaluasi karyawan berhasil diperbarui",
+    });
+  };
+
   // Get evaluated employee IDs
   const evaluatedEmployeeIds = evaluations.map(evaluation => evaluation.employee_id);
   const availableEmployees = dbEmployees.filter(emp => !evaluatedEmployeeIds.includes(emp.id));
@@ -247,14 +270,24 @@ export const EmployeeForm = ({ onAddEmployee, employees }: EmployeeFormProps) =>
                 <div key={employee.id} className="p-4 border rounded-lg bg-gray-50 relative">
                   <div className="flex justify-between items-start">
                     <h4 className="font-semibold text-gray-800">{employee.name}</h4>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => handleEmployeeDetailClick(employee)}
-                      className="h-8 w-8 p-0"
-                    >
-                      <Eye className="h-4 w-4" />
-                    </Button>
+                    <div className="flex gap-1">
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => handleEmployeeDetailClick(employee)}
+                        className="h-8 w-8 p-0"
+                      >
+                        <Eye className="h-4 w-4" />
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => handleEmployeeEditClick(employee)}
+                        className="h-8 w-8 p-0"
+                      >
+                        <Edit className="h-4 w-4" />
+                      </Button>
+                    </div>
                   </div>
                   <div className="mt-2 space-y-1 text-sm text-gray-600">
                     <p>Kualitas Kerja: {employee.kualitasKerja}/5</p>
@@ -364,6 +397,14 @@ export const EmployeeForm = ({ onAddEmployee, employees }: EmployeeFormProps) =>
           )}
         </DialogContent>
       </Dialog>
+
+      {/* Employee Edit Dialog */}
+      <EditEmployeeDialog
+        employee={selectedEmployeeForEdit}
+        isOpen={isEditDialogOpen}
+        onClose={() => setIsEditDialogOpen(false)}
+        onUpdate={handleEmployeeUpdate}
+      />
 
       {/* Add New Employee Evaluation Form */}
       <Card className="bg-white shadow-lg">
