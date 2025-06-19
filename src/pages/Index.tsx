@@ -1,4 +1,5 @@
-import { useState } from "react";
+
+import { useState, useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -13,6 +14,8 @@ import { CriteriaTable } from "@/components/CriteriaTable";
 import { CriteriaManagement } from "@/components/CriteriaManagement";
 import { EmployeeManagement } from "@/components/EmployeeManagement";
 import { Navbar } from "@/components/Navbar";
+import { supabase } from "@/integrations/supabase/client";
+import { useToast } from "@/hooks/use-toast";
 
 export interface Employee {
   id: string;
@@ -43,69 +46,110 @@ export interface SAWResult {
 }
 
 const Index = () => {
-  const [employees, setEmployees] = useState<Employee[]>([
-    {
-      id: "1",
-      name: "Budi",
-      kualitasKerja: 4,
-      tanggungJawab: 5,
-      kuantitasKerja: 4,
-      pemahamanTugas: 4,
-      inisiatif: 3,
-      kerjasama: 4,
-      hariAlpa: 1,
-      keterlambatan: 3,
-      hariIzin: 2,
-      hariSakit: 4,
-      pulangCepat: 1,
-      prestasi: 0,
-      suratPeringatan: 0
-    },
-    {
-      id: "2",
-      name: "Citra",
-      kualitasKerja: 5,
-      tanggungJawab: 4,
-      kuantitasKerja: 4,
-      pemahamanTugas: 5,
-      inisiatif: 4,
-      kerjasama: 5,
-      hariAlpa: 0,
-      keterlambatan: 1,
-      hariIzin: 2,
-      hariSakit: 1,
-      pulangCepat: 0,
-      prestasi: 1,
-      suratPeringatan: 0
-    },
-    {
-      id: "3",
-      name: "Dedi",
-      kualitasKerja: 3,
-      tanggungJawab: 3,
-      kuantitasKerja: 5,
-      pemahamanTugas: 3,
-      inisiatif: 3,
-      kerjasama: 4,
-      hariAlpa: 3,
-      keterlambatan: 5,
-      hariIzin: 4,
-      hariSakit: 1,
-      pulangCepat: 2,
-      prestasi: 0,
-      suratPeringatan: 1
-    }
-  ]);
-
+  const [employees, setEmployees] = useState<Employee[]>([]);
   const [results, setResults] = useState<SAWResult[]>([]);
+  const [totalCriteria, setTotalCriteria] = useState(0);
+  const [totalEmployeesInDB, setTotalEmployeesInDB] = useState(0);
+  const [loading, setLoading] = useState(true);
+  const { toast } = useToast();
+
+  // Load data from database
+  const loadDataFromDatabase = async () => {
+    setLoading(true);
+    try {
+      // Load employees and their evaluations
+      const { data: evaluationsData, error: evalError } = await supabase
+        .from('employee_evaluations')
+        .select(`
+          *,
+          employees!inner(id, name, position, department)
+        `);
+
+      if (evalError) {
+        console.error('Error fetching evaluations:', evalError);
+      } else {
+        // Convert database evaluations to Employee format
+        const convertedEmployees: Employee[] = (evaluationsData || []).map(evaluation => ({
+          id: evaluation.employees.id,
+          name: evaluation.employees.name,
+          kualitasKerja: evaluation.kualitas_kerja,
+          tanggungJawab: evaluation.tanggung_jawab,
+          kuantitasKerja: evaluation.kuantitas_kerja,
+          pemahamanTugas: evaluation.pemahaman_tugas,
+          inisiatif: evaluation.inisiatif,
+          kerjasama: evaluation.kerjasama,
+          hariAlpa: evaluation.hari_alpa,
+          keterlambatan: evaluation.keterlambatan,
+          hariIzin: evaluation.hari_izin,
+          hariSakit: evaluation.hari_sakit,
+          pulangCepat: evaluation.pulang_cepat,
+          prestasi: evaluation.prestasi,
+          suratPeringatan: evaluation.surat_peringatan
+        }));
+
+        setEmployees(convertedEmployees);
+        console.log('Loaded employees with evaluations:', convertedEmployees.length);
+      }
+
+      // Load criteria count
+      const { count: criteriaCount, error: criteriaError } = await supabase
+        .from('criteria')
+        .select('*', { count: 'exact', head: true });
+
+      if (criteriaError) {
+        console.error('Error fetching criteria count:', criteriaError);
+      } else {
+        setTotalCriteria(criteriaCount || 0);
+      }
+
+      // Load total employees count
+      const { count: employeesCount, error: employeesError } = await supabase
+        .from('employees')
+        .select('*', { count: 'exact', head: true });
+
+      if (employeesError) {
+        console.error('Error fetching employees count:', employeesError);
+      } else {
+        setTotalEmployeesInDB(employeesCount || 0);
+      }
+
+    } catch (error) {
+      console.error('Network error loading data:', error);
+      toast({
+        title: "Error",
+        description: "Gagal memuat data dari database",
+        variant: "destructive",
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    loadDataFromDatabase();
+  }, []);
 
   const addEmployee = (employee: Employee) => {
-    setEmployees([...employees, employee]);
+    setEmployees(prev => [...prev, employee]);
   };
 
   const calculateResults = (sawResults: SAWResult[]) => {
     setResults(sawResults);
   };
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-green-50 to-blue-50">
+        <Navbar />
+        <div className="container mx-auto p-6">
+          <div className="text-center py-20">
+            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-green-600 mx-auto mb-4"></div>
+            <p className="text-gray-600">Memuat data dari database...</p>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-green-50 to-blue-50">
@@ -130,7 +174,8 @@ const Index = () => {
                 <Users className="h-8 w-8 text-blue-600" />
                 <div className="ml-4">
                   <p className="text-sm font-medium text-gray-600">Total Karyawan</p>
-                  <p className="text-2xl font-bold text-gray-900">{employees.length}</p>
+                  <p className="text-2xl font-bold text-gray-900">{totalEmployeesInDB}</p>
+                  <p className="text-xs text-gray-500">Terevaluasi: {employees.length}</p>
                 </div>
               </div>
             </CardContent>
@@ -142,7 +187,8 @@ const Index = () => {
                 <Calculator className="h-8 w-8 text-green-600" />
                 <div className="ml-4">
                   <p className="text-sm font-medium text-gray-600">Kriteria</p>
-                  <p className="text-2xl font-bold text-gray-900">13</p>
+                  <p className="text-2xl font-bold text-gray-900">{totalCriteria}</p>
+                  <p className="text-xs text-gray-500">Dari database</p>
                 </div>
               </div>
             </CardContent>
@@ -153,8 +199,9 @@ const Index = () => {
               <div className="flex items-center">
                 <Trophy className="h-8 w-8 text-yellow-600" />
                 <div className="ml-4">
-                  <p className="text-sm font-medium text-gray-600">Terevaluasi</p>
+                  <p className="text-sm font-medium text-gray-600">Terhitung</p>
                   <p className="text-2xl font-bold text-gray-900">{results.length}</p>
+                  <p className="text-xs text-gray-500">Hasil SAW</p>
                 </div>
               </div>
             </CardContent>
@@ -169,6 +216,7 @@ const Index = () => {
                   <p className="text-2xl font-bold text-gray-900">
                     {results.filter(r => r.convertedScore < 3).length}
                   </p>
+                  <p className="text-xs text-gray-500">Skor < 3</p>
                 </div>
               </div>
             </CardContent>

@@ -9,7 +9,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { UserPlus, User, Eye } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
-import { useToast } from "@/components/ui/use-toast";
+import { useToast } from "@/hooks/use-toast";
 import type { Employee as DBEmployee, EmployeeEvaluation } from "@/types/database";
 import type { Employee, SAWResult } from "@/pages/Index";
 
@@ -60,7 +60,7 @@ export const EmployeeForm = ({ onAddEmployee, employees }: EmployeeFormProps) =>
         });
       } else {
         setDbEmployees(data || []);
-        console.log('Employees fetched successfully:', data?.length || 0);
+        console.log('DB Employees fetched successfully:', data?.length || 0);
       }
     } catch (error) {
       console.error('Network error fetching employees:', error);
@@ -78,7 +78,10 @@ export const EmployeeForm = ({ onAddEmployee, employees }: EmployeeFormProps) =>
     try {
       const { data, error } = await supabase
         .from('employee_evaluations')
-        .select('*');
+        .select(`
+          *,
+          employees!inner(id, name, position, department)
+        `);
       
       if (error) {
         console.error('Error fetching evaluations:', error);
@@ -103,10 +106,24 @@ export const EmployeeForm = ({ onAddEmployee, employees }: EmployeeFormProps) =>
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!selectedEmployeeId) return;
+    if (!selectedEmployeeId) {
+      toast({
+        title: "Error",
+        description: "Silakan pilih karyawan terlebih dahulu",
+        variant: "destructive",
+      });
+      return;
+    }
 
     const selectedEmployee = dbEmployees.find(emp => emp.id === selectedEmployeeId);
-    if (!selectedEmployee) return;
+    if (!selectedEmployee) {
+      toast({
+        title: "Error",
+        description: "Karyawan yang dipilih tidak ditemukan",
+        variant: "destructive",
+      });
+      return;
+    }
 
     setLoading(true);
     try {
@@ -134,7 +151,7 @@ export const EmployeeForm = ({ onAddEmployee, employees }: EmployeeFormProps) =>
 
       if (error) throw error;
 
-      // Convert to old format for compatibility
+      // Convert to old format for compatibility with SAW Calculator
       const newEmployee: Employee = {
         id: selectedEmployee.id,
         name: selectedEmployee.name,
@@ -206,6 +223,10 @@ export const EmployeeForm = ({ onAddEmployee, employees }: EmployeeFormProps) =>
   // Get evaluated employee IDs
   const evaluatedEmployeeIds = evaluations.map(evaluation => evaluation.employee_id);
   const availableEmployees = dbEmployees.filter(emp => !evaluatedEmployeeIds.includes(emp.id));
+
+  console.log('Available employees for selection:', availableEmployees.length);
+  console.log('Total DB employees:', dbEmployees.length);
+  console.log('Total evaluations:', evaluations.length);
 
   return (
     <div className="space-y-6">
@@ -371,7 +392,7 @@ export const EmployeeForm = ({ onAddEmployee, employees }: EmployeeFormProps) =>
                 <SelectContent>
                   {availableEmployees.length === 0 ? (
                     <div className="p-2 text-center text-gray-500">
-                      {loading ? "Memuat..." : "Semua karyawan sudah dievaluasi"}
+                      {loading ? "Memuat..." : dbEmployees.length === 0 ? "Tidak ada data karyawan di database" : "Semua karyawan sudah dievaluasi"}
                     </div>
                   ) : (
                     availableEmployees.map((employee) => (
@@ -382,6 +403,9 @@ export const EmployeeForm = ({ onAddEmployee, employees }: EmployeeFormProps) =>
                   )}
                 </SelectContent>
               </Select>
+              <p className="text-sm text-gray-500 mt-1">
+                Tersedia {availableEmployees.length} dari {dbEmployees.length} karyawan
+              </p>
             </div>
 
             {selectedEmployeeId && (

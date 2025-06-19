@@ -3,130 +3,234 @@ import { useState, useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Calculator, Play } from "lucide-react";
+import { Calculator, Play, RefreshCw } from "lucide-react";
+import { supabase } from "@/integrations/supabase/client";
+import { useToast } from "@/hooks/use-toast";
 import type { Employee, SAWResult } from "@/pages/Index";
+import type { Criteria } from "@/types/database";
 
 interface SAWCalculatorProps {
   employees: Employee[];
   onCalculate: (results: SAWResult[]) => void;
 }
 
-// Weights for each criterion (total = 100%)
-const weights = {
-  kualitasKerja: 0.15,      // 15%
-  tanggungJawab: 0.15,      // 15%
-  kuantitasKerja: 0.10,     // 10%
-  pemahamanTugas: 0.10,     // 10%
-  inisiatif: 0.05,          // 5%
-  kerjasama: 0.05,          // 5%
-  hariAlpa: 0.10,           // 10%
-  keterlambatan: 0.07,      // 7%
-  hariIzin: 0.03,           // 3%
-  hariSakit: 0.03,          // 3%
-  pulangCepat: 0.02,        // 2%
-  prestasi: 0.10,           // 10%
-  suratPeringatan: 0.05     // 5%
-};
-
-const benefitCriteria = ['kualitasKerja', 'tanggungJawab', 'kuantitasKerja', 'pemahamanTugas', 'inisiatif', 'kerjasama', 'prestasi'];
-const costCriteria = ['hariAlpa', 'keterlambatan', 'hariIzin', 'hariSakit', 'pulangCepat', 'suratPeringatan'];
-
 export const SAWCalculator = ({ employees, onCalculate }: SAWCalculatorProps) => {
+  const [criteriaWeights, setCriteriaWeights] = useState<Record<string, number>>({});
   const [decisionMatrix, setDecisionMatrix] = useState<number[][]>([]);
   const [normalizedMatrix, setNormalizedMatrix] = useState<number[][]>([]);
   const [finalScores, setFinalScores] = useState<SAWResult[]>([]);
   const [isCalculated, setIsCalculated] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const { toast } = useToast();
 
-  const calculateSAW = () => {
-    if (employees.length === 0) return;
-
-    console.log("Starting SAW calculation for employees:", employees);
-
-    // Step 1: Create decision matrix
-    const matrix = employees.map(emp => [
-      emp.kualitasKerja,
-      emp.tanggungJawab, 
-      emp.kuantitasKerja,
-      emp.pemahamanTugas,
-      emp.inisiatif,
-      emp.kerjasama,
-      emp.hariAlpa,
-      emp.keterlambatan,
-      emp.hariIzin,
-      emp.hariSakit,
-      emp.pulangCepat,
-      emp.prestasi,
-      emp.suratPeringatan
-    ]);
-
-    console.log("Decision Matrix:", matrix);
-    setDecisionMatrix(matrix);
-
-    // Step 2: Normalize matrix
-    const criteriaKeys = Object.keys(weights);
-    const normalized = matrix.map(() => new Array(criteriaKeys.length).fill(0));
-
-    for (let j = 0; j < criteriaKeys.length; j++) {
-      const criterion = criteriaKeys[j];
-      const columnValues = matrix.map(row => row[j]);
+  // Load criteria weights from database
+  const fetchCriteriaWeights = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('criteria')
+        .select('*')
+        .order('category', { ascending: true });
       
-      if (benefitCriteria.includes(criterion)) {
-        // For benefit criteria: Rij = Xij / max(Xij)
-        const maxValue = Math.max(...columnValues);
-        if (maxValue > 0) {
-          for (let i = 0; i < matrix.length; i++) {
-            normalized[i][j] = matrix[i][j] / maxValue;
-          }
+      if (error) {
+        console.error('Error fetching criteria:', error);
+        toast({
+          title: "Error",
+          description: "Gagal mengambil data kriteria dari database",
+          variant: "destructive",
+        });
+        return;
+      }
+
+      // Convert criteria data to weights object
+      const weights: Record<string, number> = {};
+      (data || []).forEach((criteria: Criteria) => {
+        // Map database criteria names to our internal field names
+        const fieldMapping: Record<string, string> = {
+          'Kualitas Kerja': 'kualitasKerja',
+          'Tanggung Jawab': 'tanggungJawab',
+          'Kuantitas Kerja': 'kuantitasKerja',
+          'Pemahaman Tugas': 'pemahamanTugas',
+          'Inisiatif': 'inisiatif',
+          'Kerjasama': 'kerjasama',
+          'Hari Alpa': 'hariAlpa',
+          'Keterlambatan': 'keterlambatan',
+          'Hari Izin': 'hariIzin',
+          'Hari Sakit': 'hariSakit',
+          'Pulang Cepat': 'pulangCepat',
+          'Prestasi': 'prestasi',
+          'Surat Peringatan': 'suratPeringatan'
+        };
+        
+        const fieldName = fieldMapping[criteria.name];
+        if (fieldName) {
+          weights[fieldName] = criteria.weight;
         }
+      });
+
+      // Use default weights if database is empty
+      if (Object.keys(weights).length === 0) {
+        const defaultWeights = {
+          kualitasKerja: 0.15,
+          tanggungJawab: 0.15,
+          kuantitasKerja: 0.10,
+          pemahamanTugas: 0.10,
+          inisiatif: 0.05,
+          kerjasama: 0.05,
+          hariAlpa: 0.10,
+          keterlambatan: 0.07,
+          hariIzin: 0.03,
+          hariSakit: 0.03,
+          pulangCepat: 0.02,
+          prestasi: 0.10,
+          suratPeringatan: 0.05
+        };
+        setCriteriaWeights(defaultWeights);
+        console.log('Using default weights');
       } else {
-        // For cost criteria: Rij = min(Xij) / Xij
-        const minValue = Math.min(...columnValues.filter(val => val > 0));
-        if (minValue > 0) {
-          for (let i = 0; i < matrix.length; i++) {
-            normalized[i][j] = matrix[i][j] === 0 ? 1 : minValue / matrix[i][j];
+        setCriteriaWeights(weights);
+        console.log('Loaded weights from database:', weights);
+      }
+    } catch (error) {
+      console.error('Network error fetching criteria:', error);
+      toast({
+        title: "Error",
+        description: "Gagal terhubung ke database",
+        variant: "destructive",
+      });
+    }
+  };
+
+  useEffect(() => {
+    fetchCriteriaWeights();
+  }, []);
+
+  const benefitCriteria = ['kualitasKerja', 'tanggungJawab', 'kuantitasKerja', 'pemahamanTugas', 'inisiatif', 'kerjasama', 'prestasi'];
+  const costCriteria = ['hariAlpa', 'keterlambatan', 'hariIzin', 'hariSakit', 'pulangCepat', 'suratPeringatan'];
+
+  const calculateSAW = async () => {
+    if (employees.length === 0) {
+      toast({
+        title: "Error",
+        description: "Tidak ada data karyawan untuk dihitung",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    if (Object.keys(criteriaWeights).length === 0) {
+      toast({
+        title: "Error",
+        description: "Data kriteria belum dimuat",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setLoading(true);
+    console.log("Starting SAW calculation for employees:", employees);
+    console.log("Using criteria weights:", criteriaWeights);
+
+    try {
+      // Step 1: Create decision matrix
+      const matrix = employees.map(emp => [
+        emp.kualitasKerja,
+        emp.tanggungJawab, 
+        emp.kuantitasKerja,
+        emp.pemahamanTugas,
+        emp.inisiatif,
+        emp.kerjasama,
+        emp.hariAlpa,
+        emp.keterlambatan,
+        emp.hariIzin,
+        emp.hariSakit,
+        emp.pulangCepat,
+        emp.prestasi,
+        emp.suratPeringatan
+      ]);
+
+      console.log("Decision Matrix:", matrix);
+      setDecisionMatrix(matrix);
+
+      // Step 2: Normalize matrix
+      const criteriaKeys = Object.keys(criteriaWeights);
+      const normalized = matrix.map(() => new Array(criteriaKeys.length).fill(0));
+
+      for (let j = 0; j < criteriaKeys.length; j++) {
+        const criterion = criteriaKeys[j];
+        const columnValues = matrix.map(row => row[j]);
+        
+        if (benefitCriteria.includes(criterion)) {
+          // For benefit criteria: Rij = Xij / max(Xij)
+          const maxValue = Math.max(...columnValues);
+          if (maxValue > 0) {
+            for (let i = 0; i < matrix.length; i++) {
+              normalized[i][j] = matrix[i][j] / maxValue;
+            }
+          }
+        } else {
+          // For cost criteria: Rij = min(Xij) / Xij
+          const minValue = Math.min(...columnValues.filter(val => val > 0));
+          if (minValue > 0) {
+            for (let i = 0; i < matrix.length; i++) {
+              normalized[i][j] = matrix[i][j] === 0 ? 1 : minValue / matrix[i][j];
+            }
           }
         }
       }
+
+      console.log("Normalized Matrix:", normalized);
+      setNormalizedMatrix(normalized);
+
+      // Step 3: Calculate final scores
+      const weightValues = criteriaKeys.map(key => criteriaWeights[key]);
+      const results: SAWResult[] = employees.map((employee, index) => {
+        const normalizedScores = normalized[index];
+        const finalScore = normalizedScores.reduce((sum, score, j) => {
+          return sum + (score * weightValues[j]);
+        }, 0);
+
+        // Convert to 1-5 scale
+        const convertedScore = convertScore(finalScore);
+        
+        // Generate recommendation
+        const { recommendation, note } = getRecommendation(convertedScore);
+
+        return {
+          employee,
+          normalizedScores,
+          finalScore,
+          convertedScore,
+          rank: 0, // Will be set after sorting
+          recommendation,
+          note
+        };
+      });
+
+      // Step 4: Rank employees
+      results.sort((a, b) => b.finalScore - a.finalScore);
+      results.forEach((result, index) => {
+        result.rank = index + 1;
+      });
+
+      console.log("Final Results:", results);
+      setFinalScores(results);
+      setIsCalculated(true);
+      onCalculate(results);
+
+      toast({
+        title: "Berhasil",
+        description: "Perhitungan SAW selesai",
+      });
+    } catch (error) {
+      console.error('Error in SAW calculation:', error);
+      toast({
+        title: "Error",
+        description: "Terjadi kesalahan dalam perhitungan",
+        variant: "destructive",
+      });
+    } finally {
+      setLoading(false);
     }
-
-    console.log("Normalized Matrix:", normalized);
-    setNormalizedMatrix(normalized);
-
-    // Step 3: Calculate final scores
-    const weightValues = Object.values(weights);
-    const results: SAWResult[] = employees.map((employee, index) => {
-      const normalizedScores = normalized[index];
-      const finalScore = normalizedScores.reduce((sum, score, j) => {
-        return sum + (score * weightValues[j]);
-      }, 0);
-
-      // Convert to 1-5 scale
-      const convertedScore = convertScore(finalScore);
-      
-      // Generate recommendation
-      const { recommendation, note } = getRecommendation(convertedScore);
-
-      return {
-        employee,
-        normalizedScores,
-        finalScore,
-        convertedScore,
-        rank: 0, // Will be set after sorting
-        recommendation,
-        note
-      };
-    });
-
-    // Step 4: Rank employees
-    results.sort((a, b) => b.finalScore - a.finalScore);
-    results.forEach((result, index) => {
-      result.rank = index + 1;
-    });
-
-    console.log("Final Results:", results);
-    setFinalScores(results);
-    setIsCalculated(true);
-    onCalculate(results);
   };
 
   const convertScore = (sawScore: number): number => {
@@ -184,6 +288,9 @@ export const SAWCalculator = ({ employees, onCalculate }: SAWCalculatorProps) =>
                   Total karyawan: <span className="font-semibold">{employees.length}</span>
                 </p>
                 <p className="text-sm text-gray-600">
+                  Kriteria dimuat: <span className="font-semibold">{Object.keys(criteriaWeights).length}</span>
+                </p>
+                <p className="text-sm text-gray-600">
                   Status: {isCalculated ? (
                     <Badge variant="default" className="ml-1">Sudah dihitung</Badge>
                   ) : (
@@ -191,20 +298,37 @@ export const SAWCalculator = ({ employees, onCalculate }: SAWCalculatorProps) =>
                   )}
                 </p>
               </div>
-              <Button 
-                onClick={calculateSAW}
-                disabled={employees.length === 0}
-                className="bg-green-600 hover:bg-green-700"
-              >
-                <Play className="w-4 h-4 mr-2" />
-                Hitung SAW
-              </Button>
+              <div className="flex gap-2">
+                <Button 
+                  onClick={fetchCriteriaWeights}
+                  variant="outline"
+                  disabled={loading}
+                  size="sm"
+                >
+                  <RefreshCw className="w-4 h-4 mr-2" />
+                  Muat Ulang Kriteria
+                </Button>
+                <Button 
+                  onClick={calculateSAW}
+                  disabled={employees.length === 0 || loading || Object.keys(criteriaWeights).length === 0}
+                  className="bg-green-600 hover:bg-green-700"
+                >
+                  <Play className="w-4 h-4 mr-2" />
+                  {loading ? "Menghitung..." : "Hitung SAW"}
+                </Button>
+              </div>
             </div>
 
             {employees.length === 0 && (
               <div className="text-center py-8 text-gray-500">
                 <Calculator className="w-12 h-12 mx-auto mb-2 opacity-50" />
-                <p>Tambahkan data karyawan terlebih dahulu untuk memulai perhitungan</p>
+                <p>Tambahkan data evaluasi karyawan terlebih dahulu</p>
+              </div>
+            )}
+
+            {Object.keys(criteriaWeights).length === 0 && (
+              <div className="text-center py-4 text-orange-600 bg-orange-50 rounded-lg">
+                <p>Kriteria belum dimuat dari database. Klik "Muat Ulang Kriteria" untuk mencoba lagi.</p>
               </div>
             )}
           </div>
