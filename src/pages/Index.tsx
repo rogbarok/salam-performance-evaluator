@@ -155,7 +155,6 @@ const Index = () => {
     <div className="min-h-screen bg-gradient-to-br from-green-50 to-blue-50">
       <Navbar />
       <div className="container mx-auto p-6">
-        {/* Header */}
         <div className="text-center mb-8">
           <h1 className="text-4xl font-bold text-gray-800 mb-2">
             Sistem Evaluasi Kinerja Karyawan
@@ -166,7 +165,6 @@ const Index = () => {
           </Badge>
         </div>
 
-        {/* Stats Cards */}
         <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-8">
           <Card className="bg-white shadow-lg hover:shadow-xl transition-shadow">
             <CardContent className="p-6">
@@ -216,14 +214,13 @@ const Index = () => {
                   <p className="text-2xl font-bold text-gray-900">
                     {results.filter(r => r.convertedScore < 3).length}
                   </p>
-                  <p className="text-xs text-gray-500">Skor < 3</p>
+                  <p className="text-xs text-gray-500">Skor &lt; 3</p>
                 </div>
               </div>
             </CardContent>
           </Card>
         </div>
 
-        {/* Main Content */}
         <Tabs defaultValue="criteria" className="w-full">
           <TabsList className="grid w-full grid-cols-6 mb-6">
             <TabsTrigger value="criteria">Kriteria & Bobot</TabsTrigger>
