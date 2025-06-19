@@ -52,7 +52,13 @@ export const SAWCalculator = ({ employees, onCalculate }: SAWCalculatorProps) =>
         return;
       }
 
-      setCriteriaData(data);
+      // Type assertion to ensure proper typing
+      const typedCriteria = data.map(criteria => ({
+        ...criteria,
+        type: criteria.type as 'Benefit' | 'Cost'
+      }));
+
+      setCriteriaData(typedCriteria);
 
       // Convert criteria data to weights and types object
       const weights: Record<string, number> = {};
@@ -79,7 +85,7 @@ export const SAWCalculator = ({ employees, onCalculate }: SAWCalculatorProps) =>
         'Surat Peringatan': 'suratPeringatan'
       };
       
-      data.forEach((criteria: any) => {
+      typedCriteria.forEach((criteria) => {
         const fieldName = fieldMapping[criteria.name];
         if (fieldName) {
           weights[fieldName] = criteria.weight;
@@ -97,7 +103,7 @@ export const SAWCalculator = ({ employees, onCalculate }: SAWCalculatorProps) =>
 
       setCriteriaWeights(weights);
       setCriteriaTypes(types);
-      console.log('Loaded criteria from database:', data.length);
+      console.log('Loaded criteria from database:', typedCriteria.length);
       console.log('Mapped weights:', weights);
       console.log('Mapped types:', types);
     } catch (error) {

@@ -83,7 +83,7 @@ export const EmployeeForm = ({ onAddEmployee, employees }: EmployeeFormProps) =>
         .from('employee_evaluations')
         .select(`
           *,
-          employees!inner(id, name, position, department)
+          employees!inner(id, name, position, department, email, hire_date)
         `);
       
       if (error) {

@@ -39,5 +39,12 @@ export interface EmployeeEvaluation {
   surat_peringatan: number;
   created_at?: string;
   updated_at?: string;
-  employees?: Employee;
+  employees?: {
+    id: string;
+    name: string;
+    position: string;
+    department: string;
+    email: string;
+    hire_date: string;
+  };
 }
