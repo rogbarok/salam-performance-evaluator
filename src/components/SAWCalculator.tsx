@@ -1,8 +1,9 @@
+
 import { useState, useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Calculator, Play, RefreshCw } from "lucide-react";
+import { Calculator, Play, RefreshCw, AlertTriangle } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import type { Employee, SAWResult } from "@/pages/Index";
@@ -51,7 +52,6 @@ export const SAWCalculator = ({ employees, onCalculate }: SAWCalculatorProps) =>
         return;
       }
 
-      // Type assertion to ensure proper typing
       const typedCriteria = data.map(criteria => ({
         ...criteria,
         type: criteria.type as 'Benefit' | 'Cost'
@@ -59,11 +59,9 @@ export const SAWCalculator = ({ employees, onCalculate }: SAWCalculatorProps) =>
 
       setCriteriaData(typedCriteria);
 
-      // Convert criteria data to weights and types object
       const weights: Record<string, number> = {};
       const types: Record<string, string> = {};
       
-      // Map database criteria names to our internal field names
       const fieldMapping: Record<string, string> = {
         'Kualitas Kerja': 'kualitasKerja',
         'Tanggung Jawab': 'tanggungJawab',
@@ -71,13 +69,9 @@ export const SAWCalculator = ({ employees, onCalculate }: SAWCalculatorProps) =>
         'Pemahaman Tugas': 'pemahamanTugas',
         'Inisiatif': 'inisiatif',
         'Kerjasama': 'kerjasama',
-        'Hari Alpa': 'hariAlpa',
         'Jumlah Hari Alpa': 'hariAlpa',
-        'Keterlambatan': 'keterlambatan',
         'Jumlah Keterlambatan': 'keterlambatan',
-        'Hari Izin': 'hariIzin',
         'Jumlah Hari Izin': 'hariIzin',
-        'Hari Sakit': 'hariSakit',
         'Jumlah Hari Sakit': 'hariSakit',
         'Pulang Cepat': 'pulangCepat',
         'Prestasi': 'prestasi',
@@ -87,16 +81,16 @@ export const SAWCalculator = ({ employees, onCalculate }: SAWCalculatorProps) =>
       typedCriteria.forEach((criteria) => {
         const fieldName = fieldMapping[criteria.name];
         if (fieldName) {
-          weights[fieldName] = criteria.weight;
+          // Convert percentage to decimal
+          weights[fieldName] = criteria.weight / 100;
           types[fieldName] = criteria.type;
         }
       });
 
-      // DON'T normalize weights - use original weights from database
       setCriteriaWeights(weights);
       setCriteriaTypes(types);
       console.log('Loaded criteria from database:', typedCriteria.length);
-      console.log('Mapped weights:', weights);
+      console.log('Mapped weights (converted to decimal):', weights);
       console.log('Mapped types:', types);
     } catch (error) {
       console.error('Network error fetching criteria:', error);
@@ -111,6 +105,24 @@ export const SAWCalculator = ({ employees, onCalculate }: SAWCalculatorProps) =>
   useEffect(() => {
     fetchCriteriaWeights();
   }, []);
+
+  // Convert raw values to 0-1 scale based on the given rules
+  const convertToScale = (value: number, isPerformance: boolean = true): number => {
+    if (isPerformance) {
+      // For performance criteria (1-5 scale)
+      switch(value) {
+        case 5: return 1.00;    // Sangat Baik (0.81-1.00)
+        case 4: return 0.80;    // Baik (0.61-0.80)
+        case 3: return 0.60;    // Cukup (0.41-0.60)
+        case 2: return 0.40;    // Kurang (0.21-0.40)
+        case 1: return 0.20;    // Sangat Kurang (0.00-0.20)
+        default: return 0.20;
+      }
+    } else {
+      // For count-based criteria (absence, tardiness, etc.)
+      return value;
+    }
+  };
 
   const calculateSAW = async () => {
     if (employees.length === 0) {
@@ -136,30 +148,33 @@ export const SAWCalculator = ({ employees, onCalculate }: SAWCalculatorProps) =>
     console.log("Using criteria weights:", criteriaWeights);
 
     try {
-      // Get all possible criteria fields
       const allCriteria = [
         'kualitasKerja', 'tanggungJawab', 'kuantitasKerja', 'pemahamanTugas', 
         'inisiatif', 'kerjasama', 'hariAlpa', 'keterlambatan', 'hariIzin', 
         'hariSakit', 'pulangCepat', 'prestasi', 'suratPeringatan'
       ];
 
-      // Filter to only include criteria that have weights
       const activeCriteria = allCriteria.filter(criterion => criteriaWeights[criterion] !== undefined);
       
       console.log("Active criteria for calculation:", activeCriteria);
 
-      // Step 1: Create decision matrix
+      // Step 1: Create decision matrix with proper conversion
       const matrix = employees.map(emp => 
         activeCriteria.map(criterion => {
-          const value = emp[criterion as keyof Employee];
-          return typeof value === 'number' ? value : 0;
+          const rawValue = emp[criterion as keyof Employee] as number;
+          
+          // Check if this is a performance criteria (1-5 scale) or count-based
+          const isPerformanceCriteria = ['kualitasKerja', 'tanggungJawab', 'kuantitasKerja', 
+            'pemahamanTugas', 'inisiatif', 'kerjasama', 'prestasi'].includes(criterion);
+          
+          return isPerformanceCriteria ? convertToScale(rawValue, true) : rawValue;
         })
       );
 
-      console.log("Decision Matrix:", matrix);
+      console.log("Decision Matrix (converted):", matrix);
       setDecisionMatrix(matrix);
 
-      // Step 2: Normalize matrix with CORRECT SAW normalization
+      // Step 2: Normalize matrix
       const normalized = matrix.map(() => new Array(activeCriteria.length).fill(0));
 
       for (let j = 0; j < activeCriteria.length; j++) {
@@ -170,7 +185,6 @@ export const SAWCalculator = ({ employees, onCalculate }: SAWCalculatorProps) =>
         console.log(`Processing criterion ${criterion} (${criterionType}):`, columnValues);
         
         if (criterionType === 'Benefit') {
-          // For benefit criteria: Rij = Xij / max(Xij)
           const maxValue = Math.max(...columnValues);
           console.log(`Max value for ${criterion}:`, maxValue);
           
@@ -179,13 +193,11 @@ export const SAWCalculator = ({ employees, onCalculate }: SAWCalculatorProps) =>
               normalized[i][j] = matrix[i][j] / maxValue;
             }
           } else {
-            // If all values are 0, set normalized to 0 (not 1)
             for (let i = 0; i < matrix.length; i++) {
               normalized[i][j] = 0;
             }
           }
         } else {
-          // For cost criteria: Rij = min(Xij) / Xij
           const nonZeroValues = columnValues.filter(val => val > 0);
           const minValue = nonZeroValues.length > 0 ? Math.min(...nonZeroValues) : 0;
           
@@ -193,7 +205,7 @@ export const SAWCalculator = ({ employees, onCalculate }: SAWCalculatorProps) =>
           
           for (let i = 0; i < matrix.length; i++) {
             if (matrix[i][j] === 0) {
-              normalized[i][j] = 1; // Best score for cost criteria when value is 0
+              normalized[i][j] = 1;
             } else {
               normalized[i][j] = minValue / matrix[i][j];
             }
@@ -204,7 +216,7 @@ export const SAWCalculator = ({ employees, onCalculate }: SAWCalculatorProps) =>
       console.log("Normalized Matrix:", normalized);
       setNormalizedMatrix(normalized);
 
-      // Step 3: Calculate final scores using ORIGINAL weights (not normalized)
+      // Step 3: Calculate final scores
       const weightValues = activeCriteria.map(key => criteriaWeights[key]);
       console.log("Weight values used:", weightValues);
       
@@ -212,39 +224,51 @@ export const SAWCalculator = ({ employees, onCalculate }: SAWCalculatorProps) =>
         const normalizedScores = normalized[index];
         const finalScore = normalizedScores.reduce((sum, score, j) => {
           const weightedScore = score * weightValues[j];
-          console.log(`Employee ${employee.name}, criterion ${j}: ${score} * ${weightValues[j]} = ${weightedScore}`);
+          console.log(`Employee ${employee.name}, criterion ${activeCriteria[j]}: ${score.toFixed(3)} * ${weightValues[j]} = ${weightedScore.toFixed(3)}`);
           return sum + weightedScore;
         }, 0);
 
         console.log(`Final score for ${employee.name}:`, finalScore);
 
-        // Convert to 1-5 scale based on the actual range of scores
-        const convertedScore = convertScore(finalScore);
+        // Convert to 1-5 scale
+        const convertedScore = 1 + (finalScore * 4);
+        
+        // Check for automatic termination due to excessive absence
+        const isAutoTerminated = employee.hariAlpa > 10;
         
         // Generate recommendation
-        const { recommendation, note } = getRecommendation(convertedScore);
+        const { recommendation, note } = getRecommendation(convertedScore, isAutoTerminated, employee.hariAlpa);
 
         return {
           employee,
           normalizedScores,
           finalScore,
           convertedScore,
-          rank: 0, // Will be set after sorting
+          rank: 0,
           recommendation,
           note
         };
       });
 
-      // Step 4: Rank employees
-      results.sort((a, b) => b.finalScore - a.finalScore);
-      results.forEach((result, index) => {
+      // Step 4: Rank employees (excluding auto-terminated ones from ranking)
+      const nonTerminatedResults = results.filter(r => r.employee.hariAlpa <= 10);
+      const terminatedResults = results.filter(r => r.employee.hariAlpa > 10);
+      
+      nonTerminatedResults.sort((a, b) => b.finalScore - a.finalScore);
+      nonTerminatedResults.forEach((result, index) => {
         result.rank = index + 1;
       });
+      
+      terminatedResults.forEach(result => {
+        result.rank = 999; // Special rank for terminated employees
+      });
 
-      console.log("Final Results:", results);
-      setFinalScores(results);
+      const finalResults = [...nonTerminatedResults, ...terminatedResults];
+
+      console.log("Final Results:", finalResults);
+      setFinalScores(finalResults);
       setIsCalculated(true);
-      onCalculate(results);
+      onCalculate(finalResults);
 
       toast({
         title: "Berhasil",
@@ -262,20 +286,14 @@ export const SAWCalculator = ({ employees, onCalculate }: SAWCalculatorProps) =>
     }
   };
 
-  const convertScore = (sawScore: number): number => {
-    // Convert SAW score to 1-5 scale based on dynamic range
-    // This needs to be adjusted based on your actual score range
-    const minPossibleScore = 0;
-    const maxPossibleScore = Object.values(criteriaWeights).reduce((sum, weight) => sum + weight, 0);
+  const getRecommendation = (convertedScore: number, isAutoTerminated: boolean, absentDays: number): { recommendation: string; note?: string } => {
+    if (isAutoTerminated) {
+      return {
+        recommendation: "Diberhentikan",
+        note: `Otomatis diberhentikan karena alpa ${absentDays} hari (>10 hari)`
+      };
+    }
     
-    // Linear scaling to 1-5 range
-    const normalizedScore = (sawScore - minPossibleScore) / (maxPossibleScore - minPossibleScore);
-    const scaledScore = 1 + (normalizedScore * 4); // Scale to 1-5
-    
-    return Math.min(5, Math.max(1, scaledScore));
-  };
-
-  const getRecommendation = (convertedScore: number): { recommendation: string; note?: string } => {
     if (convertedScore >= 4.0) {
       return {
         recommendation: "Dapat diperpanjang",
@@ -376,13 +394,34 @@ export const SAWCalculator = ({ employees, onCalculate }: SAWCalculatorProps) =>
                     <div key={criteria.id} className="flex justify-between p-2 bg-gray-50 rounded">
                       <span>{criteria.name}</span>
                       <span className="text-gray-600">
-                        {criteria.type} - Bobot: {criteria.weight}
+                        {criteria.type} - Bobot: {criteria.weight}%
                       </span>
                     </div>
                   ))}
                 </div>
               </div>
             )}
+
+            {/* Conversion Scale Info */}
+            <div className="mt-4 p-3 bg-blue-50 rounded-lg text-sm">
+              <h5 className="font-semibold mb-2">Konversi Skala Penilaian (1-5):</h5>
+              <div className="grid grid-cols-2 gap-2 text-xs">
+                <span>5 (Sangat Baik) → 1.00</span>
+                <span>4 (Baik) → 0.80</span>
+                <span>3 (Cukup) → 0.60</span>
+                <span>2 (Kurang) → 0.40</span>
+                <span>1 (Sangat Kurang) → 0.20</span>
+              </div>
+            </div>
+
+            {/* Auto termination warning */}
+            <div className="mt-4 p-3 bg-red-50 rounded-lg text-sm flex items-start gap-2">
+              <AlertTriangle className="w-4 h-4 text-red-600 mt-0.5 flex-shrink-0" />
+              <div>
+                <p className="font-semibold text-red-800">Aturan Pemberhentian Otomatis:</p>
+                <p className="text-red-700">Karyawan dengan alpa lebih dari 10 hari akan otomatis diberhentikan</p>
+              </div>
+            </div>
           </div>
         </CardContent>
       </Card>
@@ -392,7 +431,7 @@ export const SAWCalculator = ({ employees, onCalculate }: SAWCalculatorProps) =>
         <Card className="bg-white shadow-lg">
           <CardHeader>
             <CardTitle className="text-lg text-gray-800">
-              Langkah 1: Matriks Keputusan (X)
+              Langkah 1: Matriks Keputusan (X) - Setelah Konversi Skala
             </CardTitle>
           </CardHeader>
           <CardContent>
@@ -411,7 +450,9 @@ export const SAWCalculator = ({ employees, onCalculate }: SAWCalculatorProps) =>
                     <tr key={employee.id} className="border-b">
                       <td className="py-2 px-2 font-medium">{employee.name}</td>
                       {decisionMatrix[index].map((value, j) => (
-                        <td key={j} className="text-center py-2 px-2">{value}</td>
+                        <td key={j} className="text-center py-2 px-2">
+                          {typeof value === 'number' && value < 1 ? value.toFixed(2) : value}
+                        </td>
                       ))}
                     </tr>
                   ))}
@@ -419,7 +460,7 @@ export const SAWCalculator = ({ employees, onCalculate }: SAWCalculatorProps) =>
               </table>
             </div>
             <p className="text-xs text-gray-500 mt-2">
-              Menggunakan {Object.keys(criteriaWeights).length} kriteria dari database
+              Nilai kinerja (1-5) telah dikonversi ke skala 0-1. Kriteria lainnya menggunakan nilai asli.
             </p>
           </CardContent>
         </Card>
@@ -444,19 +485,9 @@ export const SAWCalculator = ({ employees, onCalculate }: SAWCalculatorProps) =>
                 <thead>
                   <tr className="border-b">
                     <th className="text-left py-2 px-2">Karyawan</th>
-                    <th className="text-center py-2 px-2">C1</th>
-                    <th className="text-center py-2 px-2">C2</th>
-                    <th className="text-center py-2 px-2">C3</th>
-                    <th className="text-center py-2 px-2">C4</th>
-                    <th className="text-center py-2 px-2">C5</th>
-                    <th className="text-center py-2 px-2">C6</th>
-                    <th className="text-center py-2 px-2">C7</th>
-                    <th className="text-center py-2 px-2">C8</th>
-                    <th className="text-center py-2 px-2">C9</th>
-                    <th className="text-center py-2 px-2">C10</th>
-                    <th className="text-center py-2 px-2">C11</th>
-                    <th className="text-center py-2 px-2">C12</th>
-                    <th className="text-center py-2 px-2">C13</th>
+                    {Object.keys(criteriaWeights).map((criterion, index) => (
+                      <th key={criterion} className="text-center py-2 px-2">C{index + 1}</th>
+                    ))}
                   </tr>
                 </thead>
                 <tbody>
@@ -504,19 +535,32 @@ export const SAWCalculator = ({ employees, onCalculate }: SAWCalculatorProps) =>
                 </thead>
                 <tbody>
                   {finalScores.map((result) => (
-                    <tr key={result.employee.id} className="border-b hover:bg-gray-50">
+                    <tr key={result.employee.id} className={`border-b hover:bg-gray-50 ${
+                      result.employee.hariAlpa > 10 ? 'bg-red-50' : ''
+                    }`}>
                       <td className="py-3 px-4">
-                        <Badge variant={result.rank === 1 ? "default" : "secondary"}>
-                          #{result.rank}
-                        </Badge>
+                        {result.rank === 999 ? (
+                          <Badge variant="destructive">AUTO</Badge>
+                        ) : (
+                          <Badge variant={result.rank === 1 ? "default" : "secondary"}>
+                            #{result.rank}
+                          </Badge>
+                        )}
                       </td>
-                      <td className="py-3 px-4 font-medium">{result.employee.name}</td>
+                      <td className="py-3 px-4 font-medium">
+                        <div className="flex items-center gap-2">
+                          {result.employee.name}
+                          {result.employee.hariAlpa > 10 && (
+                            <AlertTriangle className="w-4 h-4 text-red-600" />
+                          )}
+                        </div>
+                      </td>
                       <td className="text-center py-3 px-4 font-mono">
                         {result.finalScore.toFixed(4)}
                       </td>
                       <td className="text-center py-3 px-4">
                         <Badge 
-                          variant={result.convertedScore >= 3 ? "default" : "destructive"}
+                          variant={result.convertedScore >= 3 && result.employee.hariAlpa <= 10 ? "default" : "destructive"}
                           className="font-bold"
                         >
                           {result.convertedScore.toFixed(1)}
