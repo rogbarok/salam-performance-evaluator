@@ -1,4 +1,3 @@
-
 import { useState, useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -93,14 +92,7 @@ export const SAWCalculator = ({ employees, onCalculate }: SAWCalculatorProps) =>
         }
       });
 
-      // Normalize weights to sum to 1
-      const totalWeight = Object.values(weights).reduce((sum, weight) => sum + weight, 0);
-      if (totalWeight > 0) {
-        Object.keys(weights).forEach(key => {
-          weights[key] = weights[key] / totalWeight;
-        });
-      }
-
+      // DON'T normalize weights - use original weights from database
       setCriteriaWeights(weights);
       setCriteriaTypes(types);
       console.log('Loaded criteria from database:', typedCriteria.length);
@@ -167,7 +159,7 @@ export const SAWCalculator = ({ employees, onCalculate }: SAWCalculatorProps) =>
       console.log("Decision Matrix:", matrix);
       setDecisionMatrix(matrix);
 
-      // Step 2: Normalize matrix
+      // Step 2: Normalize matrix with CORRECT SAW normalization
       const normalized = matrix.map(() => new Array(activeCriteria.length).fill(0));
 
       for (let j = 0; j < activeCriteria.length; j++) {
@@ -175,23 +167,29 @@ export const SAWCalculator = ({ employees, onCalculate }: SAWCalculatorProps) =>
         const columnValues = matrix.map(row => row[j]);
         const criterionType = criteriaTypes[criterion] || 'Benefit';
         
+        console.log(`Processing criterion ${criterion} (${criterionType}):`, columnValues);
+        
         if (criterionType === 'Benefit') {
           // For benefit criteria: Rij = Xij / max(Xij)
           const maxValue = Math.max(...columnValues);
+          console.log(`Max value for ${criterion}:`, maxValue);
+          
           if (maxValue > 0) {
             for (let i = 0; i < matrix.length; i++) {
               normalized[i][j] = matrix[i][j] / maxValue;
             }
           } else {
-            // If all values are 0, set normalized to 1
+            // If all values are 0, set normalized to 0 (not 1)
             for (let i = 0; i < matrix.length; i++) {
-              normalized[i][j] = 1;
+              normalized[i][j] = 0;
             }
           }
         } else {
           // For cost criteria: Rij = min(Xij) / Xij
           const nonZeroValues = columnValues.filter(val => val > 0);
-          const minValue = nonZeroValues.length > 0 ? Math.min(...nonZeroValues) : 1;
+          const minValue = nonZeroValues.length > 0 ? Math.min(...nonZeroValues) : 0;
+          
+          console.log(`Min value for ${criterion}:`, minValue);
           
           for (let i = 0; i < matrix.length; i++) {
             if (matrix[i][j] === 0) {
@@ -206,15 +204,21 @@ export const SAWCalculator = ({ employees, onCalculate }: SAWCalculatorProps) =>
       console.log("Normalized Matrix:", normalized);
       setNormalizedMatrix(normalized);
 
-      // Step 3: Calculate final scores
+      // Step 3: Calculate final scores using ORIGINAL weights (not normalized)
       const weightValues = activeCriteria.map(key => criteriaWeights[key]);
+      console.log("Weight values used:", weightValues);
+      
       const results: SAWResult[] = employees.map((employee, index) => {
         const normalizedScores = normalized[index];
         const finalScore = normalizedScores.reduce((sum, score, j) => {
-          return sum + (score * weightValues[j]);
+          const weightedScore = score * weightValues[j];
+          console.log(`Employee ${employee.name}, criterion ${j}: ${score} * ${weightValues[j]} = ${weightedScore}`);
+          return sum + weightedScore;
         }, 0);
 
-        // Convert to 1-5 scale
+        console.log(`Final score for ${employee.name}:`, finalScore);
+
+        // Convert to 1-5 scale based on the actual range of scores
         const convertedScore = convertScore(finalScore);
         
         // Generate recommendation
@@ -259,12 +263,16 @@ export const SAWCalculator = ({ employees, onCalculate }: SAWCalculatorProps) =>
   };
 
   const convertScore = (sawScore: number): number => {
-    // Convert SAW score (0-1) to 1-5 scale
-    if (sawScore >= 0.85) return 5;
-    if (sawScore >= 0.70) return 4;
-    if (sawScore >= 0.50) return 3;
-    if (sawScore >= 0.30) return 2;
-    return 1;
+    // Convert SAW score to 1-5 scale based on dynamic range
+    // This needs to be adjusted based on your actual score range
+    const minPossibleScore = 0;
+    const maxPossibleScore = Object.values(criteriaWeights).reduce((sum, weight) => sum + weight, 0);
+    
+    // Linear scaling to 1-5 range
+    const normalizedScore = (sawScore - minPossibleScore) / (maxPossibleScore - minPossibleScore);
+    const scaledScore = 1 + (normalizedScore * 4); // Scale to 1-5
+    
+    return Math.min(5, Math.max(1, scaledScore));
   };
 
   const getRecommendation = (convertedScore: number): { recommendation: string; note?: string } => {

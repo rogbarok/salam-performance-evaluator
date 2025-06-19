@@ -190,9 +190,16 @@ export const CriteriaManagement = () => {
     setEditingCriteria(null);
   };
 
-  const handleDialogClose = () => {
-    setIsDialogOpen(false);
+  const handleDialogOpenChange = (open: boolean) => {
+    setIsDialogOpen(open);
+    if (!open) {
+      resetForm();
+    }
+  };
+
+  const handleAddNewClick = () => {
     resetForm();
+    setIsDialogOpen(true);
   };
 
   return (
@@ -204,9 +211,9 @@ export const CriteriaManagement = () => {
               <Settings className="w-5 h-5" />
               Manajemen Kriteria ({criteria.length})
             </CardTitle>
-            <Dialog open={isDialogOpen} onOpenChange={handleDialogClose}>
+            <Dialog open={isDialogOpen} onOpenChange={handleDialogOpenChange}>
               <DialogTrigger asChild>
-                <Button onClick={() => setIsDialogOpen(true)}>
+                <Button onClick={handleAddNewClick}>
                   <Plus className="w-4 h-4 mr-2" />
                   Tambah Kriteria
                 </Button>
@@ -275,7 +282,7 @@ export const CriteriaManagement = () => {
                     <Button type="submit" disabled={loading}>
                       {loading ? "Menyimpan..." : (editingCriteria ? "Update" : "Simpan")}
                     </Button>
-                    <Button type="button" variant="outline" onClick={handleDialogClose}>
+                    <Button type="button" variant="outline" onClick={() => handleDialogOpenChange(false)}>
                       Batal
                     </Button>
                   </div>
