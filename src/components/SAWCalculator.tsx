@@ -1,4 +1,3 @@
-
 import { useState, useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -106,22 +105,25 @@ export const SAWCalculator = ({ employees, onCalculate }: SAWCalculatorProps) =>
     fetchCriteriaWeights();
   }, []);
 
-  // Convert raw values to 0-1 scale based on the given rules
-  const convertToScale = (value: number, isPerformance: boolean = true): number => {
-    if (isPerformance) {
-      // For performance criteria (1-5 scale)
-      switch(value) {
-        case 5: return 1.00;    // Sangat Baik (0.81-1.00)
-        case 4: return 0.80;    // Baik (0.61-0.80)
-        case 3: return 0.60;    // Cukup (0.41-0.60)
-        case 2: return 0.40;    // Kurang (0.21-0.40)
-        case 1: return 0.20;    // Sangat Kurang (0.00-0.20)
-        default: return 0.20;
-      }
-    } else {
-      // For count-based criteria (absence, tardiness, etc.)
-      return value;
+  // Convert raw values to 0-1 scale based on the given rules for performance criteria (1-5 scale)
+  const convertPerformanceToScale = (value: number): number => {
+    switch(value) {
+      case 5: return 1.00;    // Sangat Baik (0.81-1.00)
+      case 4: return 0.80;    // Baik (0.61-0.80)
+      case 3: return 0.60;    // Cukup (0.41-0.60)
+      case 2: return 0.40;    // Kurang (0.21-0.40)
+      case 1: return 0.20;    // Sangat Kurang (0.00-0.20)
+      default: return 0.20;
     }
+  };
+
+  // Convert final SAW score (0-1) to form scale (1-5)
+  const convertSAWToFormScale = (sawScore: number): number => {
+    if (sawScore >= 0.85) return 5;      // Sangat Baik
+    if (sawScore >= 0.70) return 4;      // Baik
+    if (sawScore >= 0.50) return 3;      // Cukup
+    if (sawScore >= 0.30) return 2;      // Kurang
+    return 1;                            // Sangat Kurang
   };
 
   const calculateSAW = async () => {
@@ -167,7 +169,7 @@ export const SAWCalculator = ({ employees, onCalculate }: SAWCalculatorProps) =>
           const isPerformanceCriteria = ['kualitasKerja', 'tanggungJawab', 'kuantitasKerja', 
             'pemahamanTugas', 'inisiatif', 'kerjasama', 'prestasi'].includes(criterion);
           
-          return isPerformanceCriteria ? convertToScale(rawValue, true) : rawValue;
+          return isPerformanceCriteria ? convertPerformanceToScale(rawValue) : rawValue;
         })
       );
 
@@ -206,8 +208,10 @@ export const SAWCalculator = ({ employees, onCalculate }: SAWCalculatorProps) =>
           for (let i = 0; i < matrix.length; i++) {
             if (matrix[i][j] === 0) {
               normalized[i][j] = 1;
-            } else {
+            } else if (minValue > 0) {
               normalized[i][j] = minValue / matrix[i][j];
+            } else {
+              normalized[i][j] = 0;
             }
           }
         }
@@ -228,10 +232,11 @@ export const SAWCalculator = ({ employees, onCalculate }: SAWCalculatorProps) =>
           return sum + weightedScore;
         }, 0);
 
-        console.log(`Final score for ${employee.name}:`, finalScore);
+        console.log(`Final SAW score for ${employee.name}:`, finalScore);
 
-        // Convert to 1-5 scale
-        const convertedScore = 1 + (finalScore * 4);
+        // Convert SAW score to form scale (1-5)
+        const convertedScore = convertSAWToFormScale(finalScore);
+        console.log(`Converted score for ${employee.name}: ${finalScore.toFixed(4)} -> ${convertedScore}`);
         
         // Check for automatic termination due to excessive absence
         const isAutoTerminated = employee.hariAlpa > 10;
@@ -294,12 +299,12 @@ export const SAWCalculator = ({ employees, onCalculate }: SAWCalculatorProps) =>
       };
     }
     
-    if (convertedScore >= 4.0) {
+    if (convertedScore >= 4) {
       return {
         recommendation: "Dapat diperpanjang",
         note: "Kandidat promosi"
       };
-    } else if (convertedScore >= 3.0) {
+    } else if (convertedScore >= 3) {
       return {
         recommendation: "Dapat diperpanjang"
       };
@@ -312,10 +317,10 @@ export const SAWCalculator = ({ employees, onCalculate }: SAWCalculatorProps) =>
   };
 
   const getScoreLabel = (score: number): string => {
-    if (score >= 4.5) return "Sangat Baik";
-    if (score >= 3.5) return "Baik";
-    if (score >= 2.5) return "Cukup";
-    if (score >= 1.5) return "Kurang";
+    if (score >= 5) return "Sangat Baik";
+    if (score >= 4) return "Baik";
+    if (score >= 3) return "Cukup";
+    if (score >= 2) return "Kurang";
     return "Sangat Kurang";
   };
 
@@ -404,13 +409,28 @@ export const SAWCalculator = ({ employees, onCalculate }: SAWCalculatorProps) =>
 
             {/* Conversion Scale Info */}
             <div className="mt-4 p-3 bg-blue-50 rounded-lg text-sm">
-              <h5 className="font-semibold mb-2">Konversi Skala Penilaian (1-5):</h5>
-              <div className="grid grid-cols-2 gap-2 text-xs">
-                <span>5 (Sangat Baik) → 1.00</span>
-                <span>4 (Baik) → 0.80</span>
-                <span>3 (Cukup) → 0.60</span>
-                <span>2 (Kurang) → 0.40</span>
-                <span>1 (Sangat Kurang) → 0.20</span>
+              <h5 className="font-semibold mb-2">Konversi Skala:</h5>
+              <div className="grid grid-cols-1 gap-2 text-xs">
+                <div>
+                  <strong>Input Kinerja (1-5) ke Skala SAW (0-1):</strong>
+                  <div className="grid grid-cols-2 gap-1 mt-1">
+                    <span>5 (Sangat Baik) → 1.00</span>
+                    <span>4 (Baik) → 0.80</span>
+                    <span>3 (Cukup) → 0.60</span>
+                    <span>2 (Kurang) → 0.40</span>
+                    <span>1 (Sangat Kurang) → 0.20</span>
+                  </div>
+                </div>
+                <div className="mt-2">
+                  <strong>Skor Akhir SAW (0-1) ke Skala Formulir (1-5):</strong>
+                  <div className="grid grid-cols-1 gap-1 mt-1">
+                    <span>0.85 - 1.00 → 5 (Sangat Baik)</span>
+                    <span>0.70 - 0.84 → 4 (Baik)</span>
+                    <span>0.50 - 0.69 → 3 (Cukup)</span>
+                    <span>0.30 - 0.49 → 2 (Kurang)</span>
+                    <span>0.00 - 0.29 → 1 (Sangat Kurang)</span>
+                  </div>
+                </div>
               </div>
             </div>
 
@@ -513,13 +533,13 @@ export const SAWCalculator = ({ employees, onCalculate }: SAWCalculatorProps) =>
         <Card className="bg-white shadow-lg">
           <CardHeader>
             <CardTitle className="text-lg text-gray-800">
-              Langkah 3: Perhitungan Nilai Akhir (V)
+              Langkah 3: Perhitungan Nilai Akhir (V) dan Konversi ke Skala Formulir
             </CardTitle>
           </CardHeader>
           <CardContent>
             <div className="mb-4 p-3 bg-green-50 rounded-lg text-sm">
-              <p><strong>Rumus:</strong> Vi = Σ(Wj × Rij)</p>
-              <p>Dimana Wj adalah bobot kriteria dan Rij adalah nilai ternormalisasi</p>
+              <p><strong>Rumus SAW:</strong> Vi = Σ(Wj × Rij)</p>
+              <p>Kemudian skor SAW (0-1) dikonversi ke skala formulir (1-5)</p>
             </div>
             <div className="overflow-x-auto">
               <table className="w-full">
@@ -527,8 +547,8 @@ export const SAWCalculator = ({ employees, onCalculate }: SAWCalculatorProps) =>
                   <tr className="border-b">
                     <th className="text-left py-3 px-4">Rank</th>
                     <th className="text-left py-3 px-4">Nama</th>
-                    <th className="text-center py-3 px-4">Skor SAW</th>
-                    <th className="text-center py-3 px-4">Skor Konversi</th>
+                    <th className="text-center py-3 px-4">Skor SAW (0-1)</th>
+                    <th className="text-center py-3 px-4">Skor Formulir (1-5)</th>
                     <th className="text-center py-3 px-4">Kategori</th>
                     <th className="text-left py-3 px-4">Rekomendasi</th>
                   </tr>
@@ -563,7 +583,7 @@ export const SAWCalculator = ({ employees, onCalculate }: SAWCalculatorProps) =>
                           variant={result.convertedScore >= 3 && result.employee.hariAlpa <= 10 ? "default" : "destructive"}
                           className="font-bold"
                         >
-                          {result.convertedScore.toFixed(1)}
+                          {result.convertedScore}
                         </Badge>
                       </td>
                       <td className="text-center py-3 px-4">
