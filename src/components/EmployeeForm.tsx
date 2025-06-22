@@ -1,4 +1,3 @@
-
 import { useState, useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -7,7 +6,7 @@ import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
-import { UserPlus, User, Eye, Edit } from "lucide-react";
+import { UserPlus, User, Eye, Edit, Trash2 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { EditEmployeeDialog } from "@/components/EditEmployeeDialog";
@@ -101,6 +100,11 @@ export const EmployeeForm = ({ onAddEmployee, employees }: EmployeeFormProps) =>
       console.error('Network error fetching evaluations:', error);
     }
   };
+
+  // Auto-refresh evaluations when employees prop changes
+  useEffect(() => {
+    fetchEvaluations();
+  }, [employees]);
 
   useEffect(() => {
     fetchEmployees();
@@ -228,19 +232,48 @@ export const EmployeeForm = ({ onAddEmployee, employees }: EmployeeFormProps) =>
     setIsEditDialogOpen(true);
   };
 
-  const handleEmployeeUpdate = (updatedEmployee: Employee) => {
-    // Update in local state
-    const updatedEmployees = employees.map(emp => 
-      emp.id === updatedEmployee.id ? updatedEmployee : emp
-    );
+  const handleEmployeeUpdate = async (updatedEmployee: Employee) => {
+    // Refresh evaluations from database to get latest data
+    await fetchEvaluations();
     
-    // Notify parent component
+    // Also update parent component
     onAddEmployee(updatedEmployee);
     
     toast({
       title: "Berhasil",
       description: "Data evaluasi karyawan berhasil diperbarui",
     });
+  };
+
+  const handleEmployeeDelete = async (employeeId: string) => {
+    if (!confirm('Apakah Anda yakin ingin menghapus data evaluasi karyawan ini?')) return;
+
+    setLoading(true);
+    try {
+      const { error } = await supabase
+        .from('employee_evaluations')
+        .delete()
+        .eq('employee_id', employeeId);
+
+      if (error) throw error;
+
+      toast({
+        title: "Berhasil",
+        description: "Data evaluasi karyawan berhasil dihapus",
+      });
+
+      // Refresh data
+      await fetchEvaluations();
+    } catch (error) {
+      console.error('Error deleting evaluation:', error);
+      toast({
+        title: "Error",
+        description: "Gagal menghapus data evaluasi",
+        variant: "destructive",
+      });
+    } finally {
+      setLoading(false);
+    }
   };
 
   // Get evaluated employee IDs
@@ -286,6 +319,14 @@ export const EmployeeForm = ({ onAddEmployee, employees }: EmployeeFormProps) =>
                         className="h-8 w-8 p-0"
                       >
                         <Edit className="h-4 w-4" />
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => handleEmployeeDelete(employee.id)}
+                        className="h-8 w-8 p-0 text-red-600 hover:text-red-700"
+                      >
+                        <Trash2 className="h-4 w-4" />
                       </Button>
                     </div>
                   </div>
