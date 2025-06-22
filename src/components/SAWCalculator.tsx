@@ -1,3 +1,4 @@
+
 import { useState, useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -80,7 +81,7 @@ export const SAWCalculator = ({ employees, onCalculate }: SAWCalculatorProps) =>
       typedCriteria.forEach((criteria) => {
         const fieldName = fieldMapping[criteria.name];
         if (fieldName) {
-          // Convert percentage to decimal
+          // Convert percentage to decimal (15% = 0.15)
           weights[fieldName] = criteria.weight / 100;
           types[fieldName] = criteria.type;
         }
@@ -89,7 +90,7 @@ export const SAWCalculator = ({ employees, onCalculate }: SAWCalculatorProps) =>
       setCriteriaWeights(weights);
       setCriteriaTypes(types);
       console.log('Loaded criteria from database:', typedCriteria.length);
-      console.log('Mapped weights (converted to decimal):', weights);
+      console.log('Mapped weights (as decimals):', weights);
       console.log('Mapped types:', types);
     } catch (error) {
       console.error('Network error fetching criteria:', error);
@@ -105,20 +106,21 @@ export const SAWCalculator = ({ employees, onCalculate }: SAWCalculatorProps) =>
     fetchCriteriaWeights();
   }, []);
 
-  // Convert raw values to 0-1 scale based on the given rules for performance criteria (1-5 scale)
-  const convertPerformanceToScale = (value: number): number => {
-    switch(value) {
-      case 5: return 1.00;    // Sangat Baik (0.81-1.00)
-      case 4: return 0.80;    // Baik (0.61-0.80)
-      case 3: return 0.60;    // Cukup (0.41-0.60)
-      case 2: return 0.40;    // Kurang (0.21-0.40)
-      case 1: return 0.20;    // Sangat Kurang (0.00-0.20)
-      default: return 0.20;
+  // Convert form score (1-5) to normalized scale (0-1) based on scale rules
+  const convertFormScoreToNormalizedScale = (score: number): number => {
+    // Convert 1-5 scale to 0-1 scale using the specified ranges
+    switch(score) {
+      case 5: return 1.00;    // Sangat Baik (0.81-1.00) -> use max
+      case 4: return 0.80;    // Baik (0.61-0.80) -> use max
+      case 3: return 0.60;    // Cukup (0.41-0.60) -> use max
+      case 2: return 0.40;    // Kurang (0.21-0.40) -> use max
+      case 1: return 0.20;    // Sangat Kurang (0.00-0.20) -> use max
+      default: return 0.20;   // Default to lowest
     }
   };
 
-  // Convert final SAW score (0-1) to form scale (1-5)
-  const convertSAWToFormScale = (sawScore: number): number => {
+  // Convert final SAW score (0-1) back to form scale (1-5)
+  const convertSAWScoreToFormScale = (sawScore: number): number => {
     if (sawScore >= 0.85) return 5;      // Sangat Baik
     if (sawScore >= 0.70) return 4;      // Baik
     if (sawScore >= 0.50) return 3;      // Cukup
@@ -147,7 +149,7 @@ export const SAWCalculator = ({ employees, onCalculate }: SAWCalculatorProps) =>
 
     setLoading(true);
     console.log("Starting SAW calculation for employees:", employees.length);
-    console.log("Using criteria weights:", criteriaWeights);
+    console.log("Using criteria weights (decimals):", criteriaWeights);
 
     try {
       const allCriteria = [
@@ -160,23 +162,23 @@ export const SAWCalculator = ({ employees, onCalculate }: SAWCalculatorProps) =>
       
       console.log("Active criteria for calculation:", activeCriteria);
 
-      // Step 1: Create decision matrix with proper conversion
+      // Step 1: Create decision matrix - convert performance scores to 0-1 scale
       const matrix = employees.map(emp => 
         activeCriteria.map(criterion => {
           const rawValue = emp[criterion as keyof Employee] as number;
           
-          // Check if this is a performance criteria (1-5 scale) or count-based
+          // Performance criteria (1-5 scale) need conversion to 0-1 scale
           const isPerformanceCriteria = ['kualitasKerja', 'tanggungJawab', 'kuantitasKerja', 
             'pemahamanTugas', 'inisiatif', 'kerjasama', 'prestasi'].includes(criterion);
           
-          return isPerformanceCriteria ? convertPerformanceToScale(rawValue) : rawValue;
+          return isPerformanceCriteria ? convertFormScoreToNormalizedScale(rawValue) : rawValue;
         })
       );
 
-      console.log("Decision Matrix (converted):", matrix);
+      console.log("Decision Matrix (with converted performance scores):", matrix);
       setDecisionMatrix(matrix);
 
-      // Step 2: Normalize matrix
+      // Step 2: Apply SAW normalization
       const normalized = matrix.map(() => new Array(activeCriteria.length).fill(0));
 
       for (let j = 0; j < activeCriteria.length; j++) {
@@ -184,9 +186,10 @@ export const SAWCalculator = ({ employees, onCalculate }: SAWCalculatorProps) =>
         const columnValues = matrix.map(row => row[j]);
         const criterionType = criteriaTypes[criterion] || 'Benefit';
         
-        console.log(`Processing criterion ${criterion} (${criterionType}):`, columnValues);
+        console.log(`Normalizing criterion ${criterion} (${criterionType}):`, columnValues);
         
         if (criterionType === 'Benefit') {
+          // For Benefit: Rij = Xij / max(Xij)
           const maxValue = Math.max(...columnValues);
           console.log(`Max value for ${criterion}:`, maxValue);
           
@@ -200,6 +203,7 @@ export const SAWCalculator = ({ employees, onCalculate }: SAWCalculatorProps) =>
             }
           }
         } else {
+          // For Cost: Rij = min(Xij) / Xij
           const nonZeroValues = columnValues.filter(val => val > 0);
           const minValue = nonZeroValues.length > 0 ? Math.min(...nonZeroValues) : 0;
           
@@ -207,7 +211,7 @@ export const SAWCalculator = ({ employees, onCalculate }: SAWCalculatorProps) =>
           
           for (let i = 0; i < matrix.length; i++) {
             if (matrix[i][j] === 0) {
-              normalized[i][j] = 1;
+              normalized[i][j] = 1; // Best score if no cost
             } else if (minValue > 0) {
               normalized[i][j] = minValue / matrix[i][j];
             } else {
@@ -220,25 +224,28 @@ export const SAWCalculator = ({ employees, onCalculate }: SAWCalculatorProps) =>
       console.log("Normalized Matrix:", normalized);
       setNormalizedMatrix(normalized);
 
-      // Step 3: Calculate final scores
-      const weightValues = activeCriteria.map(key => criteriaWeights[key]);
-      console.log("Weight values used:", weightValues);
-      
+      // Step 3: Calculate weighted scores (SAW method)
       const results: SAWResult[] = employees.map((employee, index) => {
         const normalizedScores = normalized[index];
-        const finalScore = normalizedScores.reduce((sum, score, j) => {
-          const weightedScore = score * weightValues[j];
-          console.log(`Employee ${employee.name}, criterion ${activeCriteria[j]}: ${score.toFixed(3)} * ${weightValues[j]} = ${weightedScore.toFixed(3)}`);
+        
+        // Calculate final SAW score: sum of (weight * normalized_score)
+        const finalScore = normalizedScores.reduce((sum, normalizedScore, j) => {
+          const criterion = activeCriteria[j];
+          const weight = criteriaWeights[criterion];
+          const weightedScore = normalizedScore * weight;
+          
+          console.log(`Employee ${employee.name}, criterion ${criterion}: normalized=${normalizedScore.toFixed(3)}, weight=${weight}, weighted=${weightedScore.toFixed(3)}`);
+          
           return sum + weightedScore;
         }, 0);
 
-        console.log(`Final SAW score for ${employee.name}:`, finalScore);
+        console.log(`Final SAW score for ${employee.name}:`, finalScore.toFixed(4));
 
-        // Convert SAW score to form scale (1-5)
-        const convertedScore = convertSAWToFormScale(finalScore);
+        // Convert SAW score back to form scale (1-5)
+        const convertedScore = convertSAWScoreToFormScale(finalScore);
         console.log(`Converted score for ${employee.name}: ${finalScore.toFixed(4)} -> ${convertedScore}`);
         
-        // Check for automatic termination due to excessive absence
+        // Check for automatic termination
         const isAutoTerminated = employee.hariAlpa > 10;
         
         // Generate recommendation
@@ -255,7 +262,7 @@ export const SAWCalculator = ({ employees, onCalculate }: SAWCalculatorProps) =>
         };
       });
 
-      // Step 4: Rank employees (excluding auto-terminated ones from ranking)
+      // Step 4: Rank employees (excluding auto-terminated ones)
       const nonTerminatedResults = results.filter(r => r.employee.hariAlpa <= 10);
       const terminatedResults = results.filter(r => r.employee.hariAlpa > 10);
       
@@ -395,7 +402,7 @@ export const SAWCalculator = ({ employees, onCalculate }: SAWCalculatorProps) =>
               <div className="mt-4">
                 <h4 className="font-semibold mb-2">Kriteria yang Dimuat dari Database:</h4>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-2 text-sm">
-                  {criteriaData.map((criteria, index) => (
+                  {criteriaData.map((criteria) => (
                     <div key={criteria.id} className="flex justify-between p-2 bg-gray-50 rounded">
                       <span>{criteria.name}</span>
                       <span className="text-gray-600">
@@ -407,12 +414,12 @@ export const SAWCalculator = ({ employees, onCalculate }: SAWCalculatorProps) =>
               </div>
             )}
 
-            {/* Conversion Scale Info */}
+            {/* Scale Conversion Info */}
             <div className="mt-4 p-3 bg-blue-50 rounded-lg text-sm">
-              <h5 className="font-semibold mb-2">Konversi Skala:</h5>
+              <h5 className="font-semibold mb-2">Konversi Skala SAW:</h5>
               <div className="grid grid-cols-1 gap-2 text-xs">
                 <div>
-                  <strong>Input Kinerja (1-5) ke Skala SAW (0-1):</strong>
+                  <strong>Skala Formulir (1-5) ke Skala Ternormalisasi (0-1):</strong>
                   <div className="grid grid-cols-2 gap-1 mt-1">
                     <span>5 (Sangat Baik) → 1.00</span>
                     <span>4 (Baik) → 0.80</span>
@@ -451,7 +458,7 @@ export const SAWCalculator = ({ employees, onCalculate }: SAWCalculatorProps) =>
         <Card className="bg-white shadow-lg">
           <CardHeader>
             <CardTitle className="text-lg text-gray-800">
-              Langkah 1: Matriks Keputusan (X) - Setelah Konversi Skala
+              Langkah 1: Matriks Keputusan (X) - Data Setelah Konversi Skala
             </CardTitle>
           </CardHeader>
           <CardContent>
@@ -496,7 +503,7 @@ export const SAWCalculator = ({ employees, onCalculate }: SAWCalculatorProps) =>
           </CardHeader>
           <CardContent>
             <div className="mb-4 p-3 bg-blue-50 rounded-lg text-sm">
-              <p><strong>Rumus Normalisasi:</strong></p>
+              <p><strong>Rumus Normalisasi SAW:</strong></p>
               <p>• Benefit: Rij = Xij / max(Xij)</p>
               <p>• Cost: Rij = min(Xij) / Xij</p>
             </div>
@@ -533,12 +540,13 @@ export const SAWCalculator = ({ employees, onCalculate }: SAWCalculatorProps) =>
         <Card className="bg-white shadow-lg">
           <CardHeader>
             <CardTitle className="text-lg text-gray-800">
-              Langkah 3: Perhitungan Nilai Akhir (V) dan Konversi ke Skala Formulir
+              Langkah 3: Perhitungan Nilai Akhir SAW (V) dan Konversi ke Skala Formulir
             </CardTitle>
           </CardHeader>
           <CardContent>
             <div className="mb-4 p-3 bg-green-50 rounded-lg text-sm">
               <p><strong>Rumus SAW:</strong> Vi = Σ(Wj × Rij)</p>
+              <p>Dimana Wj adalah bobot dalam desimal (15% = 0.15)</p>
               <p>Kemudian skor SAW (0-1) dikonversi ke skala formulir (1-5)</p>
             </div>
             <div className="overflow-x-auto">
