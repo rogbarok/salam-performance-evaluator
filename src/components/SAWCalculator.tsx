@@ -318,7 +318,7 @@ export const SAWCalculator = ({ employees, onCalculate }: SAWCalculatorProps) =>
     if (isAutoTerminated) {
       return {
         recommendation: "Diberhentikan",
-        note: `Otomatis diberhentikan karena alpa ${absentDays} hari (>10 hari)`
+        note: `Otomatis diberhentikan karena alpa ${absentDays} hari (lebih dari 10 hari)`
       };
     }
     
@@ -655,7 +655,7 @@ export const SAWCalculator = ({ employees, onCalculate }: SAWCalculatorProps) =>
             <div className="p-3 bg-green-50 rounded-lg">
               <h4 className="font-semibold mb-2">Langkah 2: Normalisasi dengan Skala</h4>
               <p>• Kriteria kinerja (1-5): Konversi ke skala → normalisasi</p>
-              <p>• Kriteria lainnya: Normalisasi langsung</p>
+              <p>• Kriteria lainnya: Norm alisasi langsung</p>
               <p>• Benefit: Rij = Xij / max(Xij)</p>
               <p>• Cost: Rij = min(Xij) / Xij</p>
             </div>
@@ -668,9 +668,9 @@ export const SAWCalculator = ({ employees, onCalculate }: SAWCalculatorProps) =>
 
             <div className="p-3 bg-red-50 rounded-lg">
               <h4 className="font-semibold mb-2">Aturan Khusus</h4>
-              <p>• Alpa > 10 hari: Otomatis diberhentikan</p>
+              <p>• Alpa lebih dari 10 hari: Otomatis diberhentikan</p>
               <p>• Skor ≥ 3: Dapat diperpanjang</p>
-              <p>• Skor < 3: Diberhentikan</p>
+              <p>• Skor kurang dari 3: Diberhentikan</p>
             </div>
           </div>
         </CardContent>
