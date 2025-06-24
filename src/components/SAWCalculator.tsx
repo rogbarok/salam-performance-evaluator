@@ -1,16 +1,20 @@
-
 import { useState, useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Calculator, Play, RefreshCw } from "lucide-react";
+import { Calculator, Play, RefreshCw, AlertTriangle } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Criteria } from "@/types/database";
 import { useToast } from "@/hooks/use-toast";
 import type { Employee, SAWResult } from "@/pages/Index";
-import { supabase } from "@/integrations/supabase/client";
-import { SAWMatrixDisplay } from "./SAWMatrixDisplay";
-import { SAWCriteriaInfo } from "./SAWCriteriaInfo";
-import { SAWCalculationEngine } from "./SAWCalculationEngine";
+import {
+  Table,
+  TableBody,
+  TableCaption,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table"
 
 interface SAWCalculatorProps {
   employees: Employee[];
@@ -31,53 +35,23 @@ export const SAWCalculator = ({ employees, onCalculate }: SAWCalculatorProps) =>
   const fetchCriteriaWeights = async () => {
     setLoading(true);
     try {
-      const { data, error } = await supabase
-        .from('criteria')
-        .select('*')
-        .order('category', { ascending: true });
-      
-      if (error) {
-        console.error('Error fetching criteria:', error);
-        throw error;
+      const res = await fetch('/api/criteria');
+      if (!res.ok) {
+        throw new Error(`HTTP error! status: ${res.status}`);
       }
+      const data = await res.json();
 
       const weights: { [key: string]: number } = {};
       const types: { [key: string]: string } = {};
 
-      // Map database names to form field names
-      const criteriaMapping: { [key: string]: string } = {
-        'Kualitas Kerja': 'kualitasKerja',
-        'Tanggung Jawab': 'tanggungJawab',
-        'Kuantitas Kerja': 'kuantitasKerja',
-        'Pemahaman Tugas': 'pemahamanTugas',
-        'Inisiatif': 'inisiatif',
-        'Kerjasama': 'kerjasama',
-        'Jumlah Hari Alpa': 'hariAlpa',
-        'Jumlah Keterlambatan': 'keterlambatan',
-        'Jumlah Hari Izin': 'hariIzin',
-        'Jumlah Hari Sakit': 'hariSakit',
-        'Pulang Cepat': 'pulangCepat',
-        'Prestasi': 'prestasi',
-        'Surat Peringatan': 'suratPeringatan'
-      };
-
-      // Type cast the data to ensure proper typing
-      const typedCriteriaData: Criteria[] = (data || []).map(item => ({
-        ...item,
-        type: item.type as 'Benefit' | 'Cost'
-      }));
-
-      typedCriteriaData.forEach((criteria: Criteria) => {
-        const fieldName = criteriaMapping[criteria.name];
-        if (fieldName) {
-          weights[fieldName] = criteria.weight / 100; // Convert percentage to decimal
-          types[fieldName] = criteria.type;
-        }
+      data.forEach((criteria: Criteria) => {
+        weights[criteria.name] = criteria.weight / 100; // Convert percentage to decimal
+        types[criteria.name] = criteria.type;
       });
 
       setCriteriaWeights(weights);
       setCriteriaTypes(types);
-      setCriteriaData(typedCriteriaData);
+      setCriteriaData(data);
 
       console.log('Criteria weights fetched successfully:', weights);
       toast({
@@ -100,6 +74,16 @@ export const SAWCalculator = ({ employees, onCalculate }: SAWCalculatorProps) =>
     fetchCriteriaWeights();
   }, []);
 
+  // Function to convert form score (1-5) to a scale (e.g., 20-100)
+  const convertFormScoreToScale = (score: number): number => {
+    return score * 20; // Assuming a linear scale from 20 to 100
+  };
+
+  // Function to convert SAW score back to form scale (1-5)
+  const convertSAWScoreToFormScale = (sawScore: number): number => {
+    return Math.max(1, Math.min(5, Math.round(sawScore * 5)));
+  };
+
   const calculateSAW = async () => {
     if (employees.length === 0) {
       toast({
@@ -120,19 +104,188 @@ export const SAWCalculator = ({ employees, onCalculate }: SAWCalculatorProps) =>
     }
 
     setLoading(true);
+    console.log("Starting SAW calculation for employees:", employees.length);
+    console.log("Using criteria weights (decimals):", criteriaWeights);
+
     try {
-      const calculationEngine = new SAWCalculationEngine(criteriaWeights, criteriaTypes);
-      const results = await calculationEngine.calculate(employees);
+      const allCriteria = [
+        'kualitasKerja', 'tanggungJawab', 'kuantitasKerja', 'pemahamanTugas', 
+        'inisiatif', 'kerjasama', 'hariAlpa', 'keterlambatan', 'hariIzin', 
+        'hariSakit', 'pulangCepat', 'prestasi', 'suratPeringatan'
+      ];
+
+      const activeCriteria = allCriteria.filter(criterion => criteriaWeights[criterion] !== undefined);
       
-      setDecisionMatrix(results.decisionMatrix);
-      setNormalizedMatrix(results.normalizedMatrix);
-      setFinalScores(results.finalResults);
+      console.log("Active criteria for calculation:", activeCriteria);
+
+      // Step 1: Create decision matrix - use RAW DATA (no conversion yet)
+      const matrix = employees.map(emp => 
+        activeCriteria.map(criterion => {
+          const rawValue = emp[criterion as keyof Employee] as number;
+          return rawValue; // Keep raw data as is
+        })
+      );
+
+      console.log("Decision Matrix (Raw Data):", matrix);
+      setDecisionMatrix(matrix);
+
+      // Step 2: Apply SAW normalization with corrected logic for cost criteria
+      const normalized = matrix.map(() => new Array(activeCriteria.length).fill(0));
+
+      for (let j = 0; j < activeCriteria.length; j++) {
+        const criterion = activeCriteria[j];
+        const columnValues = matrix.map(row => row[j]);
+        const criterionType = criteriaTypes[criterion] || 'Benefit';
+        
+        console.log(`Normalizing criterion ${criterion} (${criterionType}):`, columnValues);
+        
+        // Check if this is a performance criteria (1-5 scale)
+        const isPerformanceCriteria = ['kualitasKerja', 'tanggungJawab', 'kuantitasKerja', 
+          'pemahamanTugas', 'inisiatif', 'kerjasama'].includes(criterion);
+        
+        if (criterionType === 'Benefit') {
+          if (isPerformanceCriteria) {
+            // For performance criteria: convert to scale first, then normalize
+            const scaleValues = columnValues.map(val => convertFormScoreToScale(val));
+            const maxScaleValue = Math.max(...scaleValues);
+            console.log(`Scale values for ${criterion}:`, scaleValues, 'Max:', maxScaleValue);
+            
+            if (maxScaleValue > 0) {
+              for (let i = 0; i < matrix.length; i++) {
+                const scaleValue = convertFormScoreToScale(matrix[i][j]);
+                normalized[i][j] = scaleValue / maxScaleValue;
+              }
+            } else {
+              for (let i = 0; i < matrix.length; i++) {
+                normalized[i][j] = 0;
+              }
+            }
+          } else if (criterion === 'prestasi') {
+            // C12 - Prestasi: if = 1 → 1.000, if = 0 → 0.000
+            for (let i = 0; i < matrix.length; i++) {
+              normalized[i][j] = matrix[i][j] === 1 ? 1.000 : 0.000;
+            }
+            console.log(`Prestasi normalization: [${normalized.map(row => row[j]).join(', ')}]`);
+          } else {
+            // For other benefit criteria: direct normalization
+            const maxValue = Math.max(...columnValues);
+            console.log(`Max value for ${criterion}:`, maxValue);
+            
+            if (maxValue > 0) {
+              for (let i = 0; i < matrix.length; i++) {
+                normalized[i][j] = matrix[i][j] / maxValue;
+              }
+            } else {
+              for (let i = 0; i < matrix.length; i++) {
+                normalized[i][j] = 0;
+              }
+            }
+          }
+        } else {
+          // For Cost criteria
+          if (criterion === 'hariAlpa') {
+            // C7 - Hari Alpa: Special rule - if > 0 → 0.000, if = 0 → 1.000
+            for (let i = 0; i < matrix.length; i++) {
+              normalized[i][j] = matrix[i][j] > 0 ? 0.000 : 1.000;
+            }
+            console.log(`Hari Alpa normalization: [${normalized.map(row => row[j]).join(', ')}]`);
+          } else if (criterion === 'suratPeringatan') {
+            // C13 - Surat Peringatan: if = 0 → 1.000, if = 1 → 0.000
+            for (let i = 0; i < matrix.length; i++) {
+              normalized[i][j] = matrix[i][j] === 0 ? 1.000 : 0.000;
+            }
+            console.log(`Surat Peringatan normalization: [${normalized.map(row => row[j]).join(', ')}]`);
+          } else {
+            // C8-C11 - Other cost criteria: min(Xij) / Xij
+            // Find minimum non-zero value
+            const nonZeroValues = columnValues.filter(val => val > 0);
+            
+            if (nonZeroValues.length === 0) {
+              // All values are 0, give everyone perfect score
+              for (let i = 0; i < matrix.length; i++) {
+                normalized[i][j] = 1.000;
+              }
+            } else {
+              const minValue = Math.min(...nonZeroValues);
+              console.log(`Min non-zero value for ${criterion}:`, minValue);
+              
+              for (let i = 0; i < matrix.length; i++) {
+                if (matrix[i][j] === 0) {
+                  normalized[i][j] = 1.000; // Best score if no cost
+                } else {
+                  normalized[i][j] = minValue / matrix[i][j];
+                }
+              }
+            }
+            console.log(`${criterion} normalization: [${normalized.map(row => row[j].toFixed(3)).join(', ')}]`);
+          }
+        }
+      }
+
+      console.log("Normalized Matrix:", normalized);
+      setNormalizedMatrix(normalized);
+
+      // Step 3: Calculate weighted scores (SAW method)
+      const results: SAWResult[] = employees.map((employee, index) => {
+        const normalizedScores = normalized[index];
+        
+        // Calculate final SAW score: sum of (weight * normalized_score)
+        const finalScore = normalizedScores.reduce((sum, normalizedScore, j) => {
+          const criterion = activeCriteria[j];
+          const weight = criteriaWeights[criterion];
+          const weightedScore = normalizedScore * weight;
+          
+          console.log(`Employee ${employee.name}, criterion ${criterion}: normalized=${normalizedScore.toFixed(3)}, weight=${weight}, weighted=${weightedScore.toFixed(3)}`);
+          
+          return sum + weightedScore;
+        }, 0);
+
+        console.log(`Final SAW score for ${employee.name}:`, finalScore.toFixed(4));
+
+        // Convert SAW score back to form scale (1-5)
+        const convertedScore = convertSAWScoreToFormScale(finalScore);
+        console.log(`Converted score for ${employee.name}: ${finalScore.toFixed(4)} -> ${convertedScore}`);
+        
+        // Check for automatic termination
+        const isAutoTerminated = employee.hariAlpa > 10;
+        
+        // Generate recommendation
+        const { recommendation, note } = getRecommendation(convertedScore, isAutoTerminated, employee.hariAlpa);
+
+        return {
+          employee,
+          normalizedScores,
+          finalScore,
+          convertedScore,
+          rank: 0,
+          recommendation,
+          note
+        };
+      });
+
+      // Step 4: Rank employees (excluding auto-terminated ones)
+      const nonTerminatedResults = results.filter(r => r.employee.hariAlpa <= 10);
+      const terminatedResults = results.filter(r => r.employee.hariAlpa > 10);
+      
+      nonTerminatedResults.sort((a, b) => b.finalScore - a.finalScore);
+      nonTerminatedResults.forEach((result, index) => {
+        result.rank = index + 1;
+      });
+      
+      terminatedResults.forEach(result => {
+        result.rank = 999; // Special rank for terminated employees
+      });
+
+      const finalResults = [...nonTerminatedResults, ...terminatedResults];
+
+      console.log("Final Results:", finalResults);
+      setFinalScores(finalResults);
       setIsCalculated(true);
-      onCalculate(results.finalResults);
+      onCalculate(finalResults);
 
       toast({
         title: "Berhasil",
-        description: `Perhitungan SAW selesai menggunakan ${Object.keys(criteriaWeights).length} kriteria`,
+        description: `Perhitungan SAW selesai menggunakan ${activeCriteria.length} kriteria`,
       });
     } catch (error) {
       console.error('Error in SAW calculation:', error);
@@ -143,6 +296,37 @@ export const SAWCalculator = ({ employees, onCalculate }: SAWCalculatorProps) =>
       });
     } finally {
       setLoading(false);
+    }
+  };
+
+  const getRecommendation = (convertedScore: number, isAutoTerminated: boolean, alpaDays: number): { recommendation: string, note?: string } => {
+    if (isAutoTerminated) {
+      return {
+        recommendation: "Pemberhentian",
+        note: `Karyawan diberhentikan otomatis karena alpa lebih dari ${alpaDays} hari.`
+      };
+    }
+
+    if (convertedScore >= 4) {
+      return { recommendation: "Promosi" };
+    } else if (convertedScore >= 3) {
+      return { recommendation: "Pertahankan" };
+    } else if (convertedScore >= 2) {
+      return { recommendation: "Evaluasi Lanjutan" };
+    } else {
+      return { recommendation: "Pemberhentian" };
+    }
+  };
+
+  const getScoreLabel = (score: number): string => {
+    if (score >= 4) {
+      return "Sangat Baik";
+    } else if (score >= 3) {
+      return "Baik";
+    } else if (score >= 2) {
+      return "Cukup";
+    } else {
+      return "Kurang";
     }
   };
 
@@ -229,18 +413,171 @@ export const SAWCalculator = ({ employees, onCalculate }: SAWCalculatorProps) =>
               </div>
             )}
 
-            <SAWCriteriaInfo />
+            {/* Detailed Criteria Mapping */}
+            <div className="mt-4 p-3 bg-green-50 rounded-lg text-sm">
+              <h5 className="font-semibold mb-2">Pemetaan Kriteria C1-C13:</h5>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-2 text-xs">
+                <div className="space-y-1">
+                  <p><strong>C1:</strong> Kualitas Kerja (Benefit)</p>
+                  <p><strong>C2:</strong> Tanggung Jawab (Benefit)</p>
+                  <p><strong>C3:</strong> Kuantitas Kerja (Benefit)</p>
+                  <p><strong>C4:</strong> Pemahaman Tugas (Benefit)</p>
+                  <p><strong>C5:</strong> Inisiatif (Benefit)</p>
+                  <p><strong>C6:</strong> Kerjasama (Benefit)</p>
+                  <p><strong>C7:</strong> Hari Alpa (Cost) - <span className="text-red-600">Jika &gt; 0 → 0.000</span></p>
+                </div>
+                <div className="space-y-1">
+                  <p><strong>C8:</strong> Keterlambatan (Cost)</p>
+                  <p><strong>C9:</strong> Hari Izin (Cost)</p>
+                  <p><strong>C10:</strong> Hari Sakit (Cost)</p>
+                  <p><strong>C11:</strong> Pulang Cepat (Cost)</p>
+                  <p><strong>C12:</strong> Prestasi (Benefit) - <span className="text-green-600">1 → 1.000, 0 → 0.000</span></p>
+                  <p><strong>C13:</strong> Surat Peringatan (Cost) - <span className="text-red-600">0 → 1.000, 1 → 0.000</span></p>
+                </div>
+              </div>
+            </div>
+
+            {/* Normalization Rules */}
+            <div className="mt-4 p-3 bg-blue-50 rounded-lg text-sm">
+              <h5 className="font-semibold mb-2">Aturan Normalisasi SAW:</h5>
+              <div className="grid grid-cols-1 gap-2 text-xs">
+                <div>
+                  <strong>Benefit Criteria (C1-C6, C12):</strong>
+                  <p>• Performance (C1-C6): Rij = (converted_score / max_converted_score)</p>
+                  <p>• Prestasi (C12): Rij = 1.000 jika nilai = 1, Rij = 0.000 jika nilai = 0</p>
+                </div>
+                <div className="mt-2">
+                  <strong>Cost Criteria (C7-C11, C13):</strong>
+                  <p>• Hari Alpa (C7): Rij = 0.000 jika nilai &gt; 0, Rij = 1.000 jika nilai = 0</p>
+                  <p>• Lainnya (C8-C11): Rij = min(Xij) / Xij</p>
+                  <p>• Surat Peringatan (C13): Rij = 1.000 jika nilai = 0, Rij = 0.000 jika nilai = 1</p>
+                </div>
+              </div>
+            </div>
+
+            {/* Auto termination warning */}
+            <div className="mt-4 p-3 bg-red-50 rounded-lg text-sm flex items-start gap-2">
+              <AlertTriangle className="w-4 h-4 text-red-600 mt-0.5 flex-shrink-0" />
+              <div>
+                <p className="font-semibold text-red-800">Aturan Pemberhentian Otomatis:</p>
+                <p className="text-red-700">Karyawan dengan alpa lebih dari 10 hari akan otomatis diberhentikan</p>
+              </div>
+            </div>
           </div>
         </CardContent>
       </Card>
 
-      <SAWMatrixDisplay 
-        employees={employees}
-        criteriaData={criteriaData}
-        decisionMatrix={decisionMatrix}
-        normalizedMatrix={normalizedMatrix}
-        finalScores={finalScores}
-      />
+      {decisionMatrix.length > 0 && (
+        <Card className="bg-white shadow-lg">
+          <CardHeader>
+            <CardTitle>Decision Matrix</CardTitle>
+            <p className="text-sm text-gray-600">Matriks keputusan awal (nilai asli)</p>
+          </CardHeader>
+          <CardContent>
+            <div className="overflow-x-auto">
+              <Table>
+                <TableCaption>Data mentah karyawan</TableCaption>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead className="w-[100px]">Nama</TableHead>
+                    {criteriaData.map((criteria) => (
+                      <TableHead key={criteria.id}>{criteria.name}</TableHead>
+                    ))}
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {employees.map((employee, index) => (
+                    <TableRow key={employee.id}>
+                      <TableCell className="font-medium">{employee.name}</TableCell>
+                      {decisionMatrix[index].map((value, j) => (
+                        <TableCell key={j}>{value}</TableCell>
+                      ))}
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {normalizedMatrix.length > 0 && (
+        <Card className="bg-white shadow-lg">
+          <CardHeader>
+            <CardTitle>Normalized Matrix</CardTitle>
+            <p className="text-sm text-gray-600">
+              Matriks yang sudah dinormalisasi menggunakan metode SAW
+            </p>
+          </CardHeader>
+          <CardContent>
+            <div className="overflow-x-auto">
+              <Table>
+                <TableCaption>Data Normalisasi</TableCaption>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead className="w-[100px]">Nama</TableHead>
+                    {criteriaData.map((criteria) => (
+                      <TableHead key={criteria.id}>{criteria.name}</TableHead>
+                    ))}
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {employees.map((employee, index) => (
+                    <TableRow key={employee.id}>
+                      <TableCell className="font-medium">{employee.name}</TableCell>
+                      {normalizedMatrix[index].map((value, j) => (
+                        <TableCell key={j}>{value.toFixed(3)}</TableCell>
+                      ))}
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {finalScores.length > 0 && (
+        <Card className="bg-white shadow-lg">
+          <CardHeader>
+            <CardTitle>Final Scores</CardTitle>
+            <p className="text-sm text-gray-600">
+              Hasil akhir perhitungan SAW dan rekomendasi
+            </p>
+          </CardHeader>
+          <CardContent>
+            <div className="overflow-x-auto">
+              <Table>
+                <TableCaption>Hasil Perhitungan SAW</TableCaption>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead className="w-[100px]">Peringkat</TableHead>
+                    <TableHead className="w-[200px]">Nama</TableHead>
+                    <TableHead>Nilai Akhir</TableHead>
+                    <TableHead>Nilai Konversi</TableHead>
+                    <TableHead>Rekomendasi</TableHead>
+                    <TableHead>Catatan</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {finalScores.map((result) => (
+                    <TableRow key={result.employee.id}>
+                      <TableCell>{result.rank === 999 ? 'Diberhentikan' : result.rank}</TableCell>
+                      <TableCell className="font-medium">{result.employee.name}</TableCell>
+                      <TableCell>{result.finalScore.toFixed(4)}</TableCell>
+                      <TableCell>
+                        {result.rank === 999 ? '-' : `${result.convertedScore} (${getScoreLabel(result.convertedScore)})`}
+                      </TableCell>
+                      <TableCell>{result.recommendation}</TableCell>
+                      <TableCell>{result.note || '-'}</TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
+          </CardContent>
+        </Card>
+      )}
     </div>
   );
 };
