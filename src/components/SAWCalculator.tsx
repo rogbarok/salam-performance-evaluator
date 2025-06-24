@@ -61,7 +61,13 @@ export const SAWCalculator = ({ employees, onCalculate }: SAWCalculatorProps) =>
         'Surat Peringatan': 'suratPeringatan'
       };
 
-      (data || []).forEach((criteria: Criteria) => {
+      // Type cast the data to ensure proper typing
+      const typedCriteriaData: Criteria[] = (data || []).map(item => ({
+        ...item,
+        type: item.type as 'Benefit' | 'Cost'
+      }));
+
+      typedCriteriaData.forEach((criteria: Criteria) => {
         const fieldName = criteriaMapping[criteria.name];
         if (fieldName) {
           weights[fieldName] = criteria.weight / 100; // Convert percentage to decimal
@@ -71,7 +77,7 @@ export const SAWCalculator = ({ employees, onCalculate }: SAWCalculatorProps) =>
 
       setCriteriaWeights(weights);
       setCriteriaTypes(types);
-      setCriteriaData(data || []);
+      setCriteriaData(typedCriteriaData);
 
       console.log('Criteria weights fetched successfully:', weights);
       toast({
