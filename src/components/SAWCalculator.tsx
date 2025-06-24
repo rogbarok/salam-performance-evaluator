@@ -3,8 +3,8 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Calculator, Play, RefreshCw, AlertTriangle } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
-import { Criteria } from "@/types/database";
 import { useToast } from "@/hooks/use-toast";
+import { supabase } from "@/integrations/supabase/client";
 import type { Employee, SAWResult } from "@/pages/Index";
 import {
   Table,
@@ -15,6 +15,15 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table"
+
+interface Criteria {
+  id: string;
+  name: string;
+  type: 'Benefit' | 'Cost';
+  weight: number;
+  category: string;
+  scale: string;
+}
 
 interface SAWCalculatorProps {
   employees: Employee[];
@@ -35,34 +44,67 @@ export const SAWCalculator = ({ employees, onCalculate }: SAWCalculatorProps) =>
   const fetchCriteriaWeights = async () => {
     setLoading(true);
     try {
-      const res = await fetch('/api/criteria');
-      if (!res.ok) {
-        throw new Error(`HTTP error! status: ${res.status}`);
+      console.log('Fetching criteria from Supabase...');
+      
+      const { data, error } = await supabase
+        .from('criteria')
+        .select('*')
+        .order('name');
+
+      if (error) {
+        console.error('Supabase error:', error);
+        throw new Error(`Database error: ${error.message}`);
       }
-      const data = await res.json();
+
+      if (!data || data.length === 0) {
+        console.warn('No criteria found in database');
+        toast({
+          title: "Peringatan",
+          description: "Tidak ada kriteria ditemukan di database. Silakan tambahkan kriteria terlebih dahulu.",
+          variant: "destructive",
+        });
+        return;
+      }
+
+      console.log('Raw criteria data from Supabase:', data);
 
       const weights: { [key: string]: number } = {};
       const types: { [key: string]: string } = {};
+      const processedCriteria: Criteria[] = [];
 
-      data.forEach((criteria: Criteria) => {
+      data.forEach((item) => {
+        // Type cast to ensure compatibility
+        const criteria: Criteria = {
+          id: item.id,
+          name: item.name,
+          type: item.type as 'Benefit' | 'Cost',
+          weight: item.weight,
+          category: item.category,
+          scale: item.scale
+        };
+
         weights[criteria.name] = criteria.weight / 100; // Convert percentage to decimal
         types[criteria.name] = criteria.type;
+        processedCriteria.push(criteria);
       });
 
       setCriteriaWeights(weights);
       setCriteriaTypes(types);
-      setCriteriaData(data);
+      setCriteriaData(processedCriteria);
 
-      console.log('Criteria weights fetched successfully:', weights);
+      console.log('Processed criteria weights:', weights);
+      console.log('Processed criteria types:', types);
+      console.log('Total criteria loaded:', processedCriteria.length);
+
       toast({
         title: "Berhasil",
-        description: "Data kriteria berhasil dimuat dari database",
+        description: `Data ${processedCriteria.length} kriteria berhasil dimuat dari database`,
       });
     } catch (error) {
-      console.error('Error fetching criteria weights:', error);
+      console.error('Error fetching criteria:', error);
       toast({
         title: "Error",
-        description: "Gagal memuat data kriteria dari database",
+        description: error instanceof Error ? error.message : "Gagal memuat data kriteria dari database",
         variant: "destructive",
       });
     } finally {
@@ -97,7 +139,7 @@ export const SAWCalculator = ({ employees, onCalculate }: SAWCalculatorProps) =>
     if (Object.keys(criteriaWeights).length === 0) {
       toast({
         title: "Error",
-        description: "Data kriteria belum dimuat dari database",
+        description: "Data kriteria belum dimuat dari database. Klik 'Muat Ulang Kriteria' terlebih dahulu.",
         variant: "destructive",
       });
       return;
@@ -117,6 +159,15 @@ export const SAWCalculator = ({ employees, onCalculate }: SAWCalculatorProps) =>
       const activeCriteria = allCriteria.filter(criterion => criteriaWeights[criterion] !== undefined);
       
       console.log("Active criteria for calculation:", activeCriteria);
+
+      if (activeCriteria.length === 0) {
+        toast({
+          title: "Error",
+          description: "Tidak ada kriteria yang aktif untuk perhitungan. Pastikan nama kriteria di database sesuai dengan field evaluasi.",
+          variant: "destructive",
+        });
+        return;
+      }
 
       // Step 1: Create decision matrix - use RAW DATA (no conversion yet)
       const matrix = employees.map(emp => 
@@ -391,9 +442,15 @@ export const SAWCalculator = ({ employees, onCalculate }: SAWCalculatorProps) =>
               </div>
             )}
 
-            {Object.keys(criteriaWeights).length === 0 && criteriaData.length === 0 && (
+            {Object.keys(criteriaWeights).length === 0 && criteriaData.length === 0 && !loading && (
               <div className="text-center py-4 text-orange-600 bg-orange-50 rounded-lg">
                 <p>Kriteria belum dimuat dari database. Pastikan ada kriteria di database dan klik "Muat Ulang Kriteria".</p>
+              </div>
+            )}
+
+            {loading && (
+              <div className="text-center py-4 text-blue-600 bg-blue-50 rounded-lg">
+                <p>Sedang memuat data kriteria dari database...</p>
               </div>
             )}
 
