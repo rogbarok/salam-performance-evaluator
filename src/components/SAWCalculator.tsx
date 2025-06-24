@@ -1,3 +1,4 @@
+
 import { useState, useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -58,7 +59,7 @@ export const SAWCalculator = ({ employees, onCalculate }: SAWCalculatorProps) =>
     'Surat Peringatan': 'suratPeringatan'
   };
 
-  // Mapping untuk kode kriteria C1-C13
+  // Mapping untuk kode kriteria C1-C13 dengan urutan yang benar
   const criteriaCodeMapping: { [key: string]: string } = {
     'kualitasKerja': 'C1',
     'tanggungJawab': 'C2',
@@ -74,6 +75,23 @@ export const SAWCalculator = ({ employees, onCalculate }: SAWCalculatorProps) =>
     'prestasi': 'C12',
     'suratPeringatan': 'C13'
   };
+
+  // Urutan kriteria berdasarkan kode C1-C13
+  const orderedCriteria = [
+    'kualitasKerja',
+    'tanggungJawab', 
+    'kuantitasKerja',
+    'pemahamanTugas',
+    'inisiatif',
+    'kerjasama',
+    'hariAlpa',
+    'keterlambatan',
+    'hariIzin',
+    'hariSakit',
+    'pulangCepat',
+    'prestasi',
+    'suratPeringatan'
+  ];
 
   const fetchCriteriaWeights = async () => {
     setLoading(true);
@@ -193,13 +211,8 @@ export const SAWCalculator = ({ employees, onCalculate }: SAWCalculatorProps) =>
     console.log("Using criteria weights (decimals):", criteriaWeights);
 
     try {
-      const allCriteria = [
-        'kualitasKerja', 'tanggungJawab', 'kuantitasKerja', 'pemahamanTugas', 
-        'inisiatif', 'kerjasama', 'hariAlpa', 'keterlambatan', 'hariIzin', 
-        'hariSakit', 'pulangCepat', 'prestasi', 'suratPeringatan'
-      ];
-
-      const activeCriteria = allCriteria.filter(criterion => criteriaWeights[criterion] !== undefined);
+      // Gunakan urutan kriteria yang sudah ditentukan (C1-C13)
+      const activeCriteria = orderedCriteria.filter(criterion => criteriaWeights[criterion] !== undefined);
       
       console.log("Active criteria for calculation:", activeCriteria);
       console.log("Available criteria weights:", Object.keys(criteriaWeights));
@@ -277,42 +290,19 @@ export const SAWCalculator = ({ employees, onCalculate }: SAWCalculatorProps) =>
             }
           }
         } else {
-          // For Cost criteria
-          if (criterion === 'hariAlpa') {
-            // C7 - Hari Alpa: Special rule - if > 0 → 0.000, if = 0 → 1.000
+          // For Cost criteria - Updated to use same logic for C7-C11 and C13
+          if (['hariAlpa', 'keterlambatan', 'hariIzin', 'hariSakit', 'pulangCepat'].includes(criterion)) {
+            // C7-C11: if > 0 → 0.000, if = 0 → 1.000
             for (let i = 0; i < matrix.length; i++) {
               normalized[i][j] = matrix[i][j] > 0 ? 0.000 : 1.000;
             }
-            console.log(`Hari Alpa normalization: [${normalized.map(row => row[j]).join(', ')}]`);
+            console.log(`${criterion} normalization: [${normalized.map(row => row[j]).join(', ')}]`);
           } else if (criterion === 'suratPeringatan') {
             // C13 - Surat Peringatan: if = 0 → 1.000, if = 1 → 0.000
             for (let i = 0; i < matrix.length; i++) {
               normalized[i][j] = matrix[i][j] === 0 ? 1.000 : 0.000;
             }
             console.log(`Surat Peringatan normalization: [${normalized.map(row => row[j]).join(', ')}]`);
-          } else {
-            // C8-C11 - Other cost criteria: min(Xij) / Xij
-            // Find minimum non-zero value
-            const nonZeroValues = columnValues.filter(val => val > 0);
-            
-            if (nonZeroValues.length === 0) {
-              // All values are 0, give everyone perfect score
-              for (let i = 0; i < matrix.length; i++) {
-                normalized[i][j] = 1.000;
-              }
-            } else {
-              const minValue = Math.min(...nonZeroValues);
-              console.log(`Min non-zero value for ${criterion}:`, minValue);
-              
-              for (let i = 0; i < matrix.length; i++) {
-                if (matrix[i][j] === 0) {
-                  normalized[i][j] = 1.000; // Best score if no cost
-                } else {
-                  normalized[i][j] = minValue / matrix[i][j];
-                }
-              }
-            }
-            console.log(`${criterion} normalization: [${normalized.map(row => row[j].toFixed(3)).join(', ')}]`);
           }
         }
       }
@@ -533,10 +523,10 @@ export const SAWCalculator = ({ employees, onCalculate }: SAWCalculatorProps) =>
                   <p><strong>C7:</strong> Hari Alpa (Cost) - <span className="text-red-600">Jika &gt; 0 → 0.000</span></p>
                 </div>
                 <div className="space-y-1">
-                  <p><strong>C8:</strong> Keterlambatan (Cost)</p>
-                  <p><strong>C9:</strong> Hari Izin (Cost)</p>
-                  <p><strong>C10:</strong> Hari Sakit (Cost)</p>
-                  <p><strong>C11:</strong> Pulang Cepat (Cost)</p>
+                  <p><strong>C8:</strong> Keterlambatan (Cost) - <span className="text-red-600">Jika &gt; 0 → 0.000</span></p>
+                  <p><strong>C9:</strong> Hari Izin (Cost) - <span className="text-red-600">Jika &gt; 0 → 0.000</span></p>
+                  <p><strong>C10:</strong> Hari Sakit (Cost) - <span className="text-red-600">Jika &gt; 0 → 0.000</span></p>
+                  <p><strong>C11:</strong> Pulang Cepat (Cost) - <span className="text-red-600">Jika &gt; 0 → 0.000</span></p>
                   <p><strong>C12:</strong> Prestasi (Benefit) - <span className="text-green-600">1 → 1.000, 0 → 0.000</span></p>
                   <p><strong>C13:</strong> Surat Peringatan (Cost) - <span className="text-red-600">0 → 1.000, 1 → 0.000</span></p>
                 </div>
@@ -545,7 +535,7 @@ export const SAWCalculator = ({ employees, onCalculate }: SAWCalculatorProps) =>
 
             {/* Normalization Rules */}
             <div className="mt-4 p-3 bg-blue-50 rounded-lg text-sm">
-              <h5 className="font-semibold mb-2">Aturan Normalisasi SAW:</h5>
+              <h5 className="font-semibold mb-2">Aturan Normalisasi SAW (Updated):</h5>
               <div className="grid grid-cols-1 gap-2 text-xs">
                 <div>
                   <strong>Benefit Criteria (C1-C6, C12):</strong>
@@ -553,9 +543,8 @@ export const SAWCalculator = ({ employees, onCalculate }: SAWCalculatorProps) =>
                   <p>• Prestasi (C12): Rij = 1.000 jika nilai = 1, Rij = 0.000 jika nilai = 0</p>
                 </div>
                 <div className="mt-2">
-                  <strong>Cost Criteria (C7-C11, C13):</strong>
-                  <p>• Hari Alpa (C7): Rij = 0.000 jika nilai &gt; 0, Rij = 1.000 jika nilai = 0</p>
-                  <p>• Lainnya (C8-C11): Rij = min(Xij) / Xij</p>
+                  <strong>Cost Criteria (C7-C13):</strong>
+                  <p>• Semua Cost Criteria (C7-C11): Rij = 0.000 jika nilai &gt; 0, Rij = 1.000 jika nilai = 0</p>
                   <p>• Surat Peringatan (C13): Rij = 1.000 jika nilai = 0, Rij = 0.000 jika nilai = 1</p>
                 </div>
               </div>
@@ -586,7 +575,7 @@ export const SAWCalculator = ({ employees, onCalculate }: SAWCalculatorProps) =>
                 <TableHeader>
                   <TableRow>
                     <TableHead className="w-[100px]">Nama</TableHead>
-                    {Object.keys(criteriaWeights).map((fieldName) => (
+                    {orderedCriteria.filter(fieldName => criteriaWeights[fieldName] !== undefined).map((fieldName) => (
                       <TableHead key={fieldName}>{criteriaCodeMapping[fieldName]}</TableHead>
                     ))}
                   </TableRow>
@@ -622,7 +611,7 @@ export const SAWCalculator = ({ employees, onCalculate }: SAWCalculatorProps) =>
                 <TableHeader>
                   <TableRow>
                     <TableHead className="w-[100px]">Nama</TableHead>
-                    {Object.keys(criteriaWeights).map((fieldName) => (
+                    {orderedCriteria.filter(fieldName => criteriaWeights[fieldName] !== undefined).map((fieldName) => (
                       <TableHead key={fieldName}>{criteriaCodeMapping[fieldName]}</TableHead>
                     ))}
                   </TableRow>
