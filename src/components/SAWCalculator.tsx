@@ -41,6 +41,23 @@ export const SAWCalculator = ({ employees, onCalculate }: SAWCalculatorProps) =>
   const [loading, setLoading] = useState(false);
   const { toast } = useToast();
 
+  // Mapping dari nama kriteria di database ke field evaluasi
+  const criteriaMapping: { [key: string]: string } = {
+    'Kualitas Kerja': 'kualitasKerja',
+    'Tanggung Jawab': 'tanggungJawab',
+    'Kuantitas Kerja': 'kuantitasKerja',
+    'Pemahaman Tugas': 'pemahamanTugas',
+    'Inisiatif': 'inisiatif',
+    'Kerjasama': 'kerjasama',
+    'Jumlah Hari Alpa': 'hariAlpa',
+    'Jumlah Keterlambatan': 'keterlambatan',
+    'Jumlah Hari Izin': 'hariIzin',
+    'Jumlah Hari Sakit': 'hariSakit',
+    'Pulang Cepat': 'pulangCepat',
+    'Prestasi': 'prestasi',
+    'Surat Peringatan': 'suratPeringatan'
+  };
+
   const fetchCriteriaWeights = async () => {
     setLoading(true);
     try {
@@ -83,8 +100,16 @@ export const SAWCalculator = ({ employees, onCalculate }: SAWCalculatorProps) =>
           scale: item.scale
         };
 
-        weights[criteria.name] = criteria.weight / 100; // Convert percentage to decimal
-        types[criteria.name] = criteria.type;
+        // Gunakan mapping untuk mencocokkan nama kriteria dengan field evaluasi
+        const fieldName = criteriaMapping[criteria.name];
+        if (fieldName) {
+          weights[fieldName] = criteria.weight / 100; // Convert percentage to decimal
+          types[fieldName] = criteria.type;
+          console.log(`Mapped ${criteria.name} -> ${fieldName}`);
+        } else {
+          console.warn(`No mapping found for criteria: ${criteria.name}`);
+        }
+
         processedCriteria.push(criteria);
       });
 
@@ -95,10 +120,11 @@ export const SAWCalculator = ({ employees, onCalculate }: SAWCalculatorProps) =>
       console.log('Processed criteria weights:', weights);
       console.log('Processed criteria types:', types);
       console.log('Total criteria loaded:', processedCriteria.length);
+      console.log('Mapped criteria fields:', Object.keys(weights));
 
       toast({
         title: "Berhasil",
-        description: `Data ${processedCriteria.length} kriteria berhasil dimuat dari database`,
+        description: `Data ${processedCriteria.length} kriteria berhasil dimuat dari database. ${Object.keys(weights).length} kriteria berhasil dipetakan.`,
       });
     } catch (error) {
       console.error('Error fetching criteria:', error);
@@ -159,11 +185,12 @@ export const SAWCalculator = ({ employees, onCalculate }: SAWCalculatorProps) =>
       const activeCriteria = allCriteria.filter(criterion => criteriaWeights[criterion] !== undefined);
       
       console.log("Active criteria for calculation:", activeCriteria);
+      console.log("Available criteria weights:", Object.keys(criteriaWeights));
 
       if (activeCriteria.length === 0) {
         toast({
           title: "Error",
-          description: "Tidak ada kriteria yang aktif untuk perhitungan. Pastikan nama kriteria di database sesuai dengan field evaluasi.",
+          description: "Tidak ada kriteria yang aktif untuk perhitungan. Pastikan mapping kriteria sudah benar.",
           variant: "destructive",
         });
         return;
@@ -458,14 +485,19 @@ export const SAWCalculator = ({ employees, onCalculate }: SAWCalculatorProps) =>
               <div className="mt-4">
                 <h4 className="font-semibold mb-2">Kriteria yang Dimuat dari Database:</h4>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-2 text-sm">
-                  {criteriaData.map((criteria) => (
-                    <div key={criteria.id} className="flex justify-between p-2 bg-gray-50 rounded">
-                      <span>{criteria.name}</span>
-                      <span className="text-gray-600">
-                        {criteria.type} - Bobot: {criteria.weight}%
-                      </span>
-                    </div>
-                  ))}
+                  {criteriaData.map((criteria) => {
+                    const fieldName = criteriaMapping[criteria.name];
+                    const isMapped = fieldName && criteriaWeights[fieldName] !== undefined;
+                    return (
+                      <div key={criteria.id} className={`flex justify-between p-2 rounded ${isMapped ? 'bg-green-50' : 'bg-red-50'}`}>
+                        <span>{criteria.name}</span>
+                        <span className="text-gray-600">
+                          {criteria.type} - Bobot: {criteria.weight}%
+                          {isMapped ? ' ✓' : ' ✗'}
+                        </span>
+                      </div>
+                    );
+                  })}
                 </div>
               </div>
             )}
