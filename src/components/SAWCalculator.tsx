@@ -58,6 +58,23 @@ export const SAWCalculator = ({ employees, onCalculate }: SAWCalculatorProps) =>
     'Surat Peringatan': 'suratPeringatan'
   };
 
+  // Mapping untuk kode kriteria C1-C13
+  const criteriaCodeMapping: { [key: string]: string } = {
+    'kualitasKerja': 'C1',
+    'tanggungJawab': 'C2',
+    'kuantitasKerja': 'C3',
+    'pemahamanTugas': 'C4',
+    'inisiatif': 'C5',
+    'kerjasama': 'C6',
+    'hariAlpa': 'C7',
+    'keterlambatan': 'C8',
+    'hariIzin': 'C9',
+    'hariSakit': 'C10',
+    'pulangCepat': 'C11',
+    'prestasi': 'C12',
+    'suratPeringatan': 'C13'
+  };
+
   const fetchCriteriaWeights = async () => {
     setLoading(true);
     try {
@@ -569,8 +586,8 @@ export const SAWCalculator = ({ employees, onCalculate }: SAWCalculatorProps) =>
                 <TableHeader>
                   <TableRow>
                     <TableHead className="w-[100px]">Nama</TableHead>
-                    {criteriaData.map((criteria) => (
-                      <TableHead key={criteria.id}>{criteria.name}</TableHead>
+                    {Object.keys(criteriaWeights).map((fieldName) => (
+                      <TableHead key={fieldName}>{criteriaCodeMapping[fieldName]}</TableHead>
                     ))}
                   </TableRow>
                 </TableHeader>
@@ -605,8 +622,8 @@ export const SAWCalculator = ({ employees, onCalculate }: SAWCalculatorProps) =>
                 <TableHeader>
                   <TableRow>
                     <TableHead className="w-[100px]">Nama</TableHead>
-                    {criteriaData.map((criteria) => (
-                      <TableHead key={criteria.id}>{criteria.name}</TableHead>
+                    {Object.keys(criteriaWeights).map((fieldName) => (
+                      <TableHead key={fieldName}>{criteriaCodeMapping[fieldName]}</TableHead>
                     ))}
                   </TableRow>
                 </TableHeader>
