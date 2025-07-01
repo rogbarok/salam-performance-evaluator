@@ -23,11 +23,33 @@ export const ResultsDisplay = ({ results }: ResultsDisplayProps) => {
         <head>
           <title>Hasil Evaluasi Kinerja Karyawan</title>
           <style>
+            @page {
+              size: A4;
+              margin: 20mm;
+            }
+            
             body { 
               font-family: Arial, sans-serif; 
-              margin: 20px; 
+              margin: 0;
+              padding: 0;
               line-height: 1.4;
+              background-image: url('/lovable-uploads/61ff049b-f848-427a-8634-9504d5931b26.png');
+              background-size: contain;
+              background-repeat: no-repeat;
+              background-position: top center;
+              min-height: 297mm; /* A4 height */
+              width: 210mm; /* A4 width */
             }
+            
+            .content-wrapper {
+              padding-top: 120px; /* Space for letterhead */
+              padding-left: 20px;
+              padding-right: 20px;
+              background: rgba(255, 255, 255, 0.95);
+              margin-top: 100px;
+              border-radius: 8px;
+            }
+            
             .header { 
               text-align: center; 
               margin-bottom: 30px; 
@@ -37,10 +59,16 @@ export const ResultsDisplay = ({ results }: ResultsDisplayProps) => {
             .header h1 { 
               color: #1f2937; 
               margin-bottom: 5px;
+              font-size: 24px;
             }
             .header h2 { 
               color: #22c55e; 
               margin-bottom: 5px;
+              font-size: 18px;
+            }
+            .header p {
+              margin: 5px 0;
+              color: #6b7280;
             }
             .summary { 
               margin-bottom: 30px; 
@@ -63,28 +91,30 @@ export const ResultsDisplay = ({ results }: ResultsDisplayProps) => {
             }
             .summary-card h3 {
               margin: 0 0 5px 0;
-              font-size: 24px;
+              font-size: 20px;
               font-weight: bold;
             }
             .summary-card p {
               margin: 0;
-              font-size: 12px;
+              font-size: 11px;
               color: #6b7280;
             }
             table { 
               width: 100%; 
               border-collapse: collapse; 
               margin-bottom: 30px;
+              font-size: 12px;
             }
             th, td { 
               border: 1px solid #ddd; 
-              padding: 8px; 
+              padding: 6px; 
               text-align: left; 
             }
             th { 
               background-color: #22c55e; 
               color: white; 
               font-weight: bold;
+              font-size: 11px;
             }
             .rank-1 { 
               background-color: #fef3c7; 
@@ -92,7 +122,7 @@ export const ResultsDisplay = ({ results }: ResultsDisplayProps) => {
             .badge {
               padding: 2px 6px;
               border-radius: 4px;
-              font-size: 10px;
+              font-size: 9px;
               font-weight: bold;
             }
             .badge-success { background: #22c55e; color: white; }
@@ -104,88 +134,108 @@ export const ResultsDisplay = ({ results }: ResultsDisplayProps) => {
               background: #f0f9ff;
               padding: 15px;
               border-radius: 8px;
+              page-break-inside: avoid;
             }
+            .analysis h3 {
+              margin-top: 0;
+              font-size: 14px;
+            }
+            .analysis p {
+              font-size: 12px;
+              margin: 5px 0;
+            }
+            
             @media print {
-              body { margin: 0; }
+              body { 
+                margin: 0;
+                -webkit-print-color-adjust: exact;
+                print-color-adjust: exact;
+              }
               .no-print { display: none; }
+              table { page-break-inside: avoid; }
+              tr { page-break-inside: avoid; }
+              .content-wrapper {
+                box-shadow: none;
+              }
             }
           </style>
         </head>
         <body>
-          <div class="header">
-            <h1>Hasil Evaluasi Kinerja Karyawan</h1>
-            <h2>Yayasan As-Salam</h2>
-            <p>Metode Simple Additive Weighting (SAW)</p>
-            <p>Tanggal: ${new Date().toLocaleDateString('id-ID')}</p>
-          </div>
-          
-          <div class="summary">
-            <h3>Ringkasan Evaluasi</h3>
-            <div class="summary-grid">
-              <div class="summary-card">
-                <h3>${results.filter(r => r.recommendation === "Dapat diperpanjang").length}</h3>
-                <p>Dapat Diperpanjang</p>
-              </div>
-              <div class="summary-card">
-                <h3>${results.filter(r => r.recommendation === "Diberhentikan").length}</h3>
-                <p>Diberhentikan</p>
-              </div>
-              <div class="summary-card">
-                <h3>${results.filter(r => r.note === "Kandidat promosi").length}</h3>
-                <p>Kandidat Promosi</p>
-              </div>
-              <div class="summary-card">
-                <h3>${(results.reduce((sum, r) => sum + r.convertedScore, 0) / results.length).toFixed(1)}</h3>
-                <p>Rata-rata Skor</p>
-              </div>
+          <div class="content-wrapper">
+            <div class="header">
+              <h1>Hasil Evaluasi Kinerja Karyawan</h1>
+              <h2>Metode Simple Additive Weighting (SAW)</h2>
+              <p>Tanggal: ${new Date().toLocaleDateString('id-ID')}</p>
             </div>
-            <ul>
-              <li>Total karyawan dievaluasi: <strong>${results.length} orang</strong></li>
-              <li>Rata-rata skor: <strong>${(results.reduce((sum, r) => sum + r.convertedScore, 0) / results.length).toFixed(2)}</strong></li>
-              <li>Persentase lulus standar minimum (≥3.0): <strong>${((results.filter(r => r.convertedScore >= 3).length / results.length) * 100).toFixed(1)}%</strong></li>
-              <li>Kandidat promosi: <strong>${results.filter(r => r.note === "Kandidat promosi").length} orang</strong></li>
-            </ul>
-          </div>
-
-          <table>
-            <thead>
-              <tr>
-                <th>Rank</th>
-                <th>Nama Karyawan</th>
-                <th>Skor SAW</th>
-                <th>Skor Konversi</th>
-                <th>Kategori</th>
-                <th>Rekomendasi</th>
-                <th>Catatan</th>
-              </tr>
-            </thead>
-            <tbody>
-              ${results.map((result, index) => `
-                <tr class="${index === 0 ? 'rank-1' : ''}">
-                  <td>#${result.rank}${result.rank === 1 ? ' 🏆' : ''}</td>
-                  <td><strong>${result.employee.name}</strong></td>
-                  <td>${result.finalScore.toFixed(4)}</td>
-                  <td><span class="badge ${result.convertedScore >= 4 ? 'badge-success' : result.convertedScore >= 3 ? 'badge-warning' : 'badge-danger'}">${result.convertedScore.toFixed(1)}</span></td>
-                  <td>${result.convertedScore >= 4.5 ? "Sangat Baik" : result.convertedScore >= 3.5 ? "Baik" : result.convertedScore >= 2.5 ? "Cukup" : result.convertedScore >= 1.5 ? "Kurang" : "Sangat Kurang"}</td>
-                  <td><span class="badge ${result.recommendation === "Dapat diperpanjang" ? 'badge-success' : 'badge-danger'}">${result.recommendation}</span></td>
-                  <td>${result.note ? `<span class="badge ${result.note === "Kandidat promosi" ? 'badge-success' : 'badge-danger'}">${result.note}</span>` : '-'}</td>
-                </tr>
-              `).join('')}
-            </tbody>
-          </table>
-
-          <div class="analysis">
-            <h3>Karyawan Terbaik (Top 3)</h3>
-            ${results.slice(0, 3).map((result, index) => `
-              <p><strong>#${result.rank} ${result.employee.name}</strong> - Skor: ${result.convertedScore.toFixed(1)}</p>
-            `).join('')}
             
-            ${results.filter(r => r.convertedScore < 3).length > 0 ? `
-              <h3>Perlu Perbaikan</h3>
-              ${results.filter(r => r.convertedScore < 3).map((result) => `
+            <div class="summary">
+              <h3>Ringkasan Evaluasi</h3>
+              <div class="summary-grid">
+                <div class="summary-card">
+                  <h3>${results.filter(r => r.recommendation === "Dapat diperpanjang").length}</h3>
+                  <p>Dapat Diperpanjang</p>
+                </div>
+                <div class="summary-card">
+                  <h3>${results.filter(r => r.recommendation === "Diberhentikan").length}</h3>
+                  <p>Diberhentikan</p>
+                </div>
+                <div class="summary-card">
+                  <h3>${results.filter(r => r.note === "Kandidat promosi").length}</h3>
+                  <p>Kandidat Promosi</p>
+                </div>
+                <div class="summary-card">
+                  <h3>${(results.reduce((sum, r) => sum + r.convertedScore, 0) / results.length).toFixed(1)}</h3>
+                  <p>Rata-rata Skor</p>
+                </div>
+              </div>
+              <ul style="font-size: 12px;">
+                <li>Total karyawan dievaluasi: <strong>${results.length} orang</strong></li>
+                <li>Rata-rata skor: <strong>${(results.reduce((sum, r) => sum + r.convertedScore, 0) / results.length).toFixed(2)}</strong></li>
+                <li>Persentase lulus standar minimum (≥3.0): <strong>${((results.filter(r => r.convertedScore >= 3).length / results.length) * 100).toFixed(1)}%</strong></li>
+                <li>Kandidat promosi: <strong>${results.filter(r => r.note === "Kandidat promosi").length} orang</strong></li>
+              </ul>
+            </div>
+
+            <table>
+              <thead>
+                <tr>
+                  <th>Rank</th>
+                  <th>Nama Karyawan</th>
+                  <th>Skor SAW</th>
+                  <th>Skor Konversi</th>
+                  <th>Kategori</th>
+                  <th>Rekomendasi</th>
+                  <th>Catatan</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${results.map((result, index) => `
+                  <tr class="${index === 0 ? 'rank-1' : ''}">
+                    <td>#${result.rank}${result.rank === 1 ? ' 🏆' : ''}</td>
+                    <td><strong>${result.employee.name}</strong></td>
+                    <td>${result.finalScore.toFixed(4)}</td>
+                    <td><span class="badge ${result.convertedScore >= 4 ? 'badge-success' : result.convertedScore >= 3 ? 'badge-warning' : 'badge-danger'}">${result.convertedScore.toFixed(1)}</span></td>
+                    <td>${result.convertedScore >= 4.5 ? "Sangat Baik" : result.convertedScore >= 3.5 ? "Baik" : result.convertedScore >= 2.5 ? "Cukup" : result.convertedScore >= 1.5 ? "Kurang" : "Sangat Kurang"}</td>
+                    <td><span class="badge ${result.recommendation === "Dapat diperpanjang" ? 'badge-success' : 'badge-danger'}">${result.recommendation}</span></td>
+                    <td>${result.note ? `<span class="badge ${result.note === "Kandidat promosi" ? 'badge-success' : 'badge-danger'}">${result.note}</span>` : '-'}</td>
+                  </tr>
+                `).join('')}
+              </tbody>
+            </table>
+
+            <div class="analysis">
+              <h3>Karyawan Terbaik (Top 3)</h3>
+              ${results.slice(0, 3).map((result, index) => `
                 <p><strong>#${result.rank} ${result.employee.name}</strong> - Skor: ${result.convertedScore.toFixed(1)}</p>
               `).join('')}
-            ` : '<p><em>Semua karyawan memenuhi standar minimum</em></p>'}
+              
+              ${results.filter(r => r.convertedScore < 3).length > 0 ? `
+                <h3>Perlu Perbaikan</h3>
+                ${results.filter(r => r.convertedScore < 3).map((result) => `
+                  <p><strong>#${result.rank} ${result.employee.name}</strong> - Skor: ${result.convertedScore.toFixed(1)}</p>
+                `).join('')}
+              ` : '<p><em>Semua karyawan memenuhi standar minimum</em></p>'}
+            </div>
           </div>
         </body>
       </html>
@@ -197,7 +247,7 @@ export const ResultsDisplay = ({ results }: ResultsDisplayProps) => {
     setTimeout(() => {
       printWindow.print();
       printWindow.close();
-    }, 250);
+    }, 500);
   };
 
   if (results.length === 0) {
