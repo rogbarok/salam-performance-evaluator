@@ -1,4 +1,3 @@
-
 import { useState, useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -226,18 +225,18 @@ export const SAWCalculator = ({ employees, onCalculate }: SAWCalculatorProps) =>
         return;
       }
 
-      // Step 1: Create decision matrix - use RAW DATA (no conversion yet)
+      // Step 1: Create decision matrix - use RAW DATA
       const matrix = employees.map(emp => 
         activeCriteria.map(criterion => {
           const rawValue = emp[criterion as keyof Employee] as number;
-          return rawValue; // Keep raw data as is
+          return rawValue;
         })
       );
 
       console.log("Decision Matrix (Raw Data):", matrix);
       setDecisionMatrix(matrix);
 
-      // Step 2: Apply SAW normalization with corrected logic for cost criteria
+      // Step 2: Apply SAW normalization dengan perbaikan untuk C1-C6
       const normalized = matrix.map(() => new Array(activeCriteria.length).fill(0));
 
       for (let j = 0; j < activeCriteria.length; j++) {
@@ -247,35 +246,9 @@ export const SAWCalculator = ({ employees, onCalculate }: SAWCalculatorProps) =>
         
         console.log(`Normalizing criterion ${criterion} (${criterionType}):`, columnValues);
         
-        // Check if this is a performance criteria (1-5 scale)
-        const isPerformanceCriteria = ['kualitasKerja', 'tanggungJawab', 'kuantitasKerja', 
-          'pemahamanTugas', 'inisiatif', 'kerjasama'].includes(criterion);
-        
         if (criterionType === 'Benefit') {
-          if (isPerformanceCriteria) {
-            // For performance criteria: convert to scale first, then normalize
-            const scaleValues = columnValues.map(val => convertFormScoreToScale(val));
-            const maxScaleValue = Math.max(...scaleValues);
-            console.log(`Scale values for ${criterion}:`, scaleValues, 'Max:', maxScaleValue);
-            
-            if (maxScaleValue > 0) {
-              for (let i = 0; i < matrix.length; i++) {
-                const scaleValue = convertFormScoreToScale(matrix[i][j]);
-                normalized[i][j] = scaleValue / maxScaleValue;
-              }
-            } else {
-              for (let i = 0; i < matrix.length; i++) {
-                normalized[i][j] = 0;
-              }
-            }
-          } else if (criterion === 'prestasi') {
-            // C12 - Prestasi: if = 1 → 1.000, if = 0 → 0.000
-            for (let i = 0; i < matrix.length; i++) {
-              normalized[i][j] = matrix[i][j] === 1 ? 1.000 : 0.000;
-            }
-            console.log(`Prestasi normalization: [${normalized.map(row => row[j]).join(', ')}]`);
-          } else {
-            // For other benefit criteria: direct normalization
+          if (['kualitasKerja', 'tanggungJawab', 'kuantitasKerja', 'pemahamanTugas', 'inisiatif', 'kerjasama'].includes(criterion)) {
+            // PERBAIKAN: Untuk C1-C6, normalisasi langsung tanpa konversi skala
             const maxValue = Math.max(...columnValues);
             console.log(`Max value for ${criterion}:`, maxValue);
             
@@ -288,9 +261,16 @@ export const SAWCalculator = ({ employees, onCalculate }: SAWCalculatorProps) =>
                 normalized[i][j] = 0;
               }
             }
+            console.log(`${criterion} normalization: [${normalized.map(row => row[j].toFixed(3)).join(', ')}]`);
+          } else if (criterion === 'prestasi') {
+            // C12 - Prestasi: if = 1 → 1.000, if = 0 → 0.000
+            for (let i = 0; i < matrix.length; i++) {
+              normalized[i][j] = matrix[i][j] === 1 ? 1.000 : 0.000;
+            }
+            console.log(`Prestasi normalization: [${normalized.map(row => row[j]).join(', ')}]`);
           }
         } else {
-          // For Cost criteria - Updated to use same logic for C7-C11 and C13
+          // For Cost criteria - C7-C13
           if (['hariAlpa', 'keterlambatan', 'hariIzin', 'hariSakit', 'pulangCepat'].includes(criterion)) {
             // C7-C11: if > 0 → 0.000, if = 0 → 1.000
             for (let i = 0; i < matrix.length; i++) {
@@ -327,14 +307,14 @@ export const SAWCalculator = ({ employees, onCalculate }: SAWCalculatorProps) =>
 
         console.log(`Final SAW score for ${employee.name}:`, finalScore.toFixed(4));
 
-        // Convert SAW score back to form scale (1-5)
-        const convertedScore = convertSAWScoreToFormScale(finalScore);
-        console.log(`Converted score for ${employee.name}: ${finalScore.toFixed(4)} -> ${convertedScore}`);
+        // Convert SAW score to 1-5 scale for display
+        const convertedScore = Math.max(1, Math.min(5, finalScore * 5));
+        console.log(`Converted score for ${employee.name}: ${finalScore.toFixed(4)} -> ${convertedScore.toFixed(2)}`);
         
         // Check for automatic termination
         const isAutoTerminated = employee.hariAlpa > 10;
         
-        // Generate recommendation
+        // PERBAIKAN: Generate recommendation berdasarkan converted score
         const { recommendation, note } = getRecommendation(convertedScore, isAutoTerminated, employee.hariAlpa);
 
         return {
@@ -387,19 +367,21 @@ export const SAWCalculator = ({ employees, onCalculate }: SAWCalculatorProps) =>
   const getRecommendation = (convertedScore: number, isAutoTerminated: boolean, alpaDays: number): { recommendation: string, note?: string } => {
     if (isAutoTerminated) {
       return {
-        recommendation: "Pemberhentian",
+        recommendation: "Diberhentikan",
         note: `Karyawan diberhentikan otomatis karena alpa lebih dari ${alpaDays} hari.`
       };
     }
 
+    // Ubah logika rekomendasi agar sesuai dengan yang ditampilkan di UI
     if (convertedScore >= 4) {
-      return { recommendation: "Promosi" };
+      return { 
+        recommendation: "Dapat diperpanjang",
+        note: "Kandidat promosi"
+      };
     } else if (convertedScore >= 3) {
-      return { recommendation: "Pertahankan" };
-    } else if (convertedScore >= 2) {
-      return { recommendation: "Evaluasi Lanjutan" };
+      return { recommendation: "Dapat diperpanjang" };
     } else {
-      return { recommendation: "Pemberhentian" };
+      return { recommendation: "Diberhentikan" };
     }
   };
 
@@ -533,18 +515,18 @@ export const SAWCalculator = ({ employees, onCalculate }: SAWCalculatorProps) =>
               </div>
             </div>
 
-            {/* Normalization Rules */}
+            {/* Updated Normalization Rules */}
             <div className="mt-4 p-3 bg-blue-50 rounded-lg text-sm">
               <h5 className="font-semibold mb-2">Aturan Normalisasi SAW (Updated):</h5>
               <div className="grid grid-cols-1 gap-2 text-xs">
                 <div>
                   <strong>Benefit Criteria (C1-C6, C12):</strong>
-                  <p>• Performance (C1-C6): Rij = (converted_score / max_converted_score)</p>
+                  <p>• Performance (C1-C6): Rij = (nilai_asli / nilai_maksimum) - DIPERBAIKI</p>
                   <p>• Prestasi (C12): Rij = 1.000 jika nilai = 1, Rij = 0.000 jika nilai = 0</p>
                 </div>
                 <div className="mt-2">
                   <strong>Cost Criteria (C7-C13):</strong>
-                  <p>• Semua Cost Criteria (C7-C11): Rij = 0.000 jika nilai &gt; 0, Rij = 1.000 jika nilai = 0</p>
+                  <p>• Cost Criteria (C7-C11): Rij = 0.000 jika nilai &gt; 0, Rij = 1.000 jika nilai = 0</p>
                   <p>• Surat Peringatan (C13): Rij = 1.000 jika nilai = 0, Rij = 0.000 jika nilai = 1</p>
                 </div>
               </div>

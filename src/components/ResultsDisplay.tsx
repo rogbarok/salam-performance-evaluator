@@ -1,4 +1,3 @@
-
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -221,7 +220,7 @@ export const ResultsDisplay = ({ results }: ResultsDisplayProps) => {
     rank: result.rank
   }));
 
-  // Recommendation distribution
+  // PERBAIKAN: Recommendation distribution dengan logika yang benar
   const recommendationData = results.reduce((acc, result) => {
     const rec = result.recommendation;
     acc[rec] = (acc[rec] || 0) + 1;
@@ -239,6 +238,9 @@ export const ResultsDisplay = ({ results }: ResultsDisplayProps) => {
     "Diberhentikan": "#ef4444"
   };
 
+  // PERBAIKAN: Hitung kandidat promosi dari note
+  const candidatesForPromotion = results.filter(r => r.note === "Kandidat promosi").length;
+
   return (
     <div id="results-content" className="space-y-6">
       {/* Print Button */}
@@ -248,13 +250,13 @@ export const ResultsDisplay = ({ results }: ResultsDisplayProps) => {
           className="bg-blue-600 hover:bg-blue-700 text-white print:hidden"
         >
           <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z" />
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z" />
           </svg>
           Cetak Hasil
         </Button>
       </div>
 
-      {/* Summary Cards */}
+      {/* PERBAIKAN: Summary Cards dengan data yang benar */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
         <Card className="bg-gradient-to-r from-green-500 to-green-600 text-white">
           <CardContent className="p-6">
@@ -291,7 +293,7 @@ export const ResultsDisplay = ({ results }: ResultsDisplayProps) => {
               <div className="ml-4">
                 <p className="text-sm opacity-90">Kandidat Promosi</p>
                 <p className="text-2xl font-bold">
-                  {results.filter(r => r.note === "Kandidat promosi").length}
+                  {candidatesForPromotion}
                 </p>
               </div>
             </div>
@@ -483,7 +485,7 @@ export const ResultsDisplay = ({ results }: ResultsDisplayProps) => {
 
             <div className="space-y-4">
               <h4 className="font-semibold text-red-700">Perlu Perbaikan</h4>
-              {results.filter(r => r.convertedScore < 3).map((result) => (
+              {results.filter(r => r.recommendation === "Diberhentikan").map((result) => (
                 <div key={result.employee.id} className="flex items-center justify-between p-3 bg-red-50 rounded-lg">
                   <div className="flex items-center gap-3">
                     <Badge variant="destructive">
@@ -494,8 +496,8 @@ export const ResultsDisplay = ({ results }: ResultsDisplayProps) => {
                   <Badge variant="destructive">{result.convertedScore.toFixed(1)}</Badge>
                 </div>
               ))}
-              {results.filter(r => r.convertedScore < 3).length === 0 && (
-                <p className="text-gray-500 italic">Semua karyawan memenuhi standar minimum</p>
+              {results.filter(r => r.recommendation === "Diberhentikan").length === 0 && (
+                <p className="text-gray-500 italic">Semua karyawan dapat diperpanjang</p>
               )}
             </div>
           </div>
@@ -505,8 +507,9 @@ export const ResultsDisplay = ({ results }: ResultsDisplayProps) => {
             <ul className="text-sm text-blue-700 space-y-1">
               <li>• Total karyawan dievaluasi: <strong>{results.length} orang</strong></li>
               <li>• Rata-rata skor: <strong>{(results.reduce((sum, r) => sum + r.convertedScore, 0) / results.length).toFixed(2)}</strong></li>
-              <li>• Persentase lulus standar minimum (≥3.0): <strong>{((results.filter(r => r.convertedScore >= 3).length / results.length) * 100).toFixed(1)}%</strong></li>
-              <li>• Kandidat promosi: <strong>{results.filter(r => r.note === "Kandidat promosi").length} orang</strong></li>
+              <li>• Dapat diperpanjang: <strong>{results.filter(r => r.recommendation === "Dapat diperpanjang").length} orang</strong></li>
+              <li>• Kandidat promosi: <strong>{candidatesForPromotion} orang</strong></li>
+              <li>• Perlu diberhentikan: <strong>{results.filter(r => r.recommendation === "Diberhentikan").length} orang</strong></li>
             </ul>
           </div>
         </CardContent>
