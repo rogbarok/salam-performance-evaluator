@@ -248,20 +248,13 @@ export const SAWCalculator = ({ employees, onCalculate }: SAWCalculatorProps) =>
         
         if (criterionType === 'Benefit') {
           if (['kualitasKerja', 'tanggungJawab', 'kuantitasKerja', 'pemahamanTugas', 'inisiatif', 'kerjasama'].includes(criterion)) {
-            // PERBAIKAN: Untuk C1-C6, normalisasi langsung tanpa konversi skala
-            const maxValue = Math.max(...columnValues);
-            console.log(`Max value for ${criterion}:`, maxValue);
-            
-            if (maxValue > 0) {
-              for (let i = 0; i < matrix.length; i++) {
-                normalized[i][j] = matrix[i][j] / maxValue;
-              }
-            } else {
-              for (let i = 0; i < matrix.length; i++) {
-                normalized[i][j] = 0;
-              }
+            // PERBAIKAN: Untuk C1-C6, gunakan aturan normalisasi khusus
+            // nilai 1 -> 0.200, nilai 2 -> 0.400, nilai 3 -> 0.600, nilai 4 -> 0.800, nilai 5 -> 1.000
+            for (let i = 0; i < matrix.length; i++) {
+              const rawValue = matrix[i][j];
+              normalized[i][j] = rawValue / 5; // Formula: nilai_asli / 5
             }
-            console.log(`${criterion} normalization: [${normalized.map(row => row[j].toFixed(3)).join(', ')}]`);
+            console.log(`${criterion} normalization (new rule): [${normalized.map(row => row[j].toFixed(3)).join(', ')}]`);
           } else if (criterion === 'prestasi') {
             // C12 - Prestasi: if = 1 → 1.000, if = 0 → 0.000
             for (let i = 0; i < matrix.length; i++) {
@@ -314,7 +307,7 @@ export const SAWCalculator = ({ employees, onCalculate }: SAWCalculatorProps) =>
         // Check for automatic termination
         const isAutoTerminated = employee.hariAlpa > 10;
         
-        // PERBAIKAN: Generate recommendation berdasarkan converted score
+        // Generate recommendation berdasarkan converted score
         const { recommendation, note } = getRecommendation(convertedScore, isAutoTerminated, employee.hariAlpa);
 
         return {
@@ -372,7 +365,7 @@ export const SAWCalculator = ({ employees, onCalculate }: SAWCalculatorProps) =>
       };
     }
 
-    // Ubah logika rekomendasi agar sesuai dengan yang ditampilkan di UI
+    // Logika rekomendasi berdasarkan converted score
     if (convertedScore >= 4) {
       return { 
         recommendation: "Dapat diperpanjang",
@@ -517,11 +510,12 @@ export const SAWCalculator = ({ employees, onCalculate }: SAWCalculatorProps) =>
 
             {/* Updated Normalization Rules */}
             <div className="mt-4 p-3 bg-blue-50 rounded-lg text-sm">
-              <h5 className="font-semibold mb-2">Aturan Normalisasi SAW (Updated):</h5>
+              <h5 className="font-semibold mb-2">Aturan Normalisasi SAW (DIPERBAIKI):</h5>
               <div className="grid grid-cols-1 gap-2 text-xs">
                 <div>
                   <strong>Benefit Criteria (C1-C6, C12):</strong>
-                  <p>• Performance (C1-C6): Rij = (nilai_asli / nilai_maksimum) - DIPERBAIKI</p>
+                  <p>• Performance (C1-C6): <span className="text-blue-600 font-semibold">nilai_asli / 5</span></p>
+                  <p className="ml-4 text-blue-600">- Nilai 1 → 0.200, Nilai 2 → 0.400, Nilai 3 → 0.600, Nilai 4 → 0.800, Nilai 5 → 1.000</p>
                   <p>• Prestasi (C12): Rij = 1.000 jika nilai = 1, Rij = 0.000 jika nilai = 0</p>
                 </div>
                 <div className="mt-2">
