@@ -27,7 +27,7 @@ export const ResultsDisplay = ({ results }: ResultsDisplayProps) => {
           <style>
             @page {
               size: A4;
-              margin: 20mm; /* Margin keseluruhan halaman */
+              margin: 0mm; /* Margin keseluruhan halaman */
             }
             
             body { 
@@ -37,7 +37,7 @@ export const ResultsDisplay = ({ results }: ResultsDisplayProps) => {
               line-height: 1.4;
               /* Gambar kop surat A4 sebagai latar belakang penuh halaman */
               background-image: url('/lovable-uploads/61ff049b-f848-427a-8634-9504d5931b26.png'); 
-              background-size: 210mm 297mm; /* Ukuran A4: lebar 210mm, tinggi 297mm */
+              background-size: 100% 100%; /* Ukuran A4: lebar 210mm, tinggi 297mm */
               background-repeat: no-repeat;
               background-position: top left; /* Posisikan di pojok kiri atas */
               min-height: 297mm; /* Pastikan body menutupi tinggi A4 */
@@ -49,19 +49,13 @@ export const ResultsDisplay = ({ results }: ResultsDisplayProps) => {
             
             .content-wrapper {
               /* Konten akan berada di atas gambar latar belakang */
-              /* Sesuaikan padding untuk memberikan ruang bagi header/footer di gambar A4 Anda */
-              padding-top: 50mm; /* Contoh: Ruang untuk bagian header dari gambar A4 Anda */
-              padding-bottom: 30mm; /* Contoh: Ruang untuk bagian footer dari gambar A4 Anda */
-              padding-left: 20px; 
-              padding-right: 20px; 
-              
-              /* Pastikan area konten berwarna putih agar teks mudah dibaca */
-              background: rgba(255, 255, 255, 1); /* Latar belakang putih solid untuk konten */
-              margin: 0; /* Hapus margin eksternal */
-              border-radius: 0; 
-              box-shadow: none;
-              /* Tinggi minimum yang disesuaikan untuk area konten */
-              min-height: calc(297mm - (50mm + 30mm)); /* Tinggi A4 - (padding-top + padding-bottom) */
+              padding-top: 50mm; /* Sesuaikan dengan tinggi area header pada gambar A4 */
+              padding-bottom: 30mm; /* Sesuaikan dengan tinggi area footer pada gambar A4 */
+              padding-left: 25mm; /* Sesuaikan dengan margin kiri pada gambar A4 */
+              padding-right: 25mm; /* Sesuaikan dengan margin kanan pada gambar A4 */
+              background: rgba(255, 255, 255, 1); /* Latar belakang putih solid untuk teks */
+              width: calc(210mm - (25mm + 25mm)); /* Sesuaikan lebar konten */
+              min-height: calc(297mm - (50mm + 30mm)); /* Tinggi konten */
             }
             
             .header { 
