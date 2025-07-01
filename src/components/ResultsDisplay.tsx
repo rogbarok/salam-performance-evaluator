@@ -1,3 +1,5 @@
+// src/components/ResultsDisplay.tsx
+
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -33,21 +35,37 @@ export const ResultsDisplay = ({ results }: ResultsDisplayProps) => {
               margin: 0;
               padding: 0;
               line-height: 1.4;
-              background-image: url('/lovable-uploads/61ff049b-f848-427a-8634-9504d5931b26.png');
-              background-size: contain;
-              background-repeat: no-repeat;
-              background-position: top center;
-              min-height: 297mm; /* A4 height */
-              width: 210mm; /* A4 width */
+              /* Hapus background-image dari sini */
+            }
+
+            .print-header-image {
+                width: 210mm; /* Lebar kertas A4 */
+                height: 297mm; /* Sesuaikan tinggi kop surat Anda */
+                display: block;
+                margin: 0 auto;
+                object-fit: cover; /* Pastikan gambar mengisi area tanpa distorsi */
             }
             
             .content-wrapper {
-              padding-top: 120px; /* Space for letterhead */
+              padding-top: 0; /* Tidak perlu padding-top karena kop sudah di luar wrapper */
               padding-left: 20px;
               padding-right: 20px;
               background: rgba(255, 255, 255, 0.95);
-              margin-top: 100px;
-              border-radius: 8px;
+              margin-top: -297mm; /* Geser konten ke atas agar berada di bawah kop, sesuaikan dengan tinggi kop */
+              position: relative; /* Penting untuk z-index jika ada overlap */
+              z-index: 1; /* Pastikan konten di atas header/footer jika ada tumpang tindih */
+              border-radius: 0; 
+            }
+
+            .print-footer-image {
+                width: 210mm; /* Lebar kertas A4 */
+                height: 20mm; /* Sesuaikan tinggi footer Anda */
+                display: block;
+                margin: 0 auto;
+                object-fit: cover;
+                position: absolute;
+                bottom: 0;
+                left: 0;
             }
             
             .header { 
@@ -148,19 +166,22 @@ export const ResultsDisplay = ({ results }: ResultsDisplayProps) => {
             @media print {
               body { 
                 margin: 0;
-                -webkit-print-color-adjust: exact;
-                print-color-adjust: exact;
+                -webkit-print-color-adjust: exact !important;
+                print-color-adjust: exact !important;
               }
               .no-print { display: none; }
               table { page-break-inside: avoid; }
               tr { page-break-inside: avoid; }
               .content-wrapper {
                 box-shadow: none;
+                background: rgba(255, 255, 255, 1) !important; /* Pastikan ini putih solid di cetakan */
               }
             }
           </style>
         </head>
         <body>
+          <img src="/lovable-uploads/61ff049b-f848-427a-8634-9504d5931b26.png" class="print-header-image" alt="Kop Surat Yayasan As-Salam Joglo" />
+          
           <div class="content-wrapper">
             <div class="header">
               <h1>Hasil Evaluasi Kinerja Karyawan</h1>
@@ -237,7 +258,8 @@ export const ResultsDisplay = ({ results }: ResultsDisplayProps) => {
               ` : '<p><em>Semua karyawan memenuhi standar minimum</em></p>'}
             </div>
           </div>
-        </body>
+
+          </body>
       </html>
     `);
 
@@ -270,7 +292,7 @@ export const ResultsDisplay = ({ results }: ResultsDisplayProps) => {
     rank: result.rank
   }));
 
-  // PERBAIKAN: Recommendation distribution dengan logika yang benar
+  // PERBAIKAN: Recommendation distribution with correct logic
   const recommendationData = results.reduce((acc, result) => {
     const rec = result.recommendation;
     acc[rec] = (acc[rec] || 0) + 1;
