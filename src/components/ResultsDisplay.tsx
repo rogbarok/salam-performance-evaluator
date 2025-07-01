@@ -27,7 +27,7 @@ export const ResultsDisplay = ({ results }: ResultsDisplayProps) => {
           <style>
             @page {
               size: A4;
-              margin: 20mm;
+              margin: 20mm; /* Margin keseluruhan halaman */
             }
             
             body { 
@@ -35,37 +35,33 @@ export const ResultsDisplay = ({ results }: ResultsDisplayProps) => {
               margin: 0;
               padding: 0;
               line-height: 1.4;
-              /* Hapus background-image dari sini */
-            }
-
-            .print-header-image {
-                width: 210mm; /* Lebar kertas A4 */
-                height: 297mm; /* Sesuaikan tinggi kop surat Anda */
-                display: block;
-                margin: 0 auto;
-                object-fit: cover; /* Pastikan gambar mengisi area tanpa distorsi */
+              /* Gambar kop surat A4 sebagai latar belakang penuh halaman */
+              background-image: url('/lovable-uploads/61ff049b-f848-427a-8634-9504d5931b26.png'); 
+              background-size: 210mm 297mm; /* Ukuran A4: lebar 210mm, tinggi 297mm */
+              background-repeat: no-repeat;
+              background-position: top left; /* Posisikan di pojok kiri atas */
+              min-height: 297mm; /* Pastikan body menutupi tinggi A4 */
+              width: 210mm; /* Pastikan body menutupi lebar A4 */
+              /* Sangat penting untuk mencetak gambar latar belakang */
+              -webkit-print-color-adjust: exact !important; 
+              print-color-adjust: exact !important; 
             }
             
             .content-wrapper {
-              padding-top: 0; /* Tidak perlu padding-top karena kop sudah di luar wrapper */
-              padding-left: 20px;
-              padding-right: 20px;
-              background: rgba(255, 255, 255, 0.95);
-              margin-top: -297mm; /* Geser konten ke atas agar berada di bawah kop, sesuaikan dengan tinggi kop */
-              position: relative; /* Penting untuk z-index jika ada overlap */
-              z-index: 1; /* Pastikan konten di atas header/footer jika ada tumpang tindih */
+              /* Konten akan berada di atas gambar latar belakang */
+              /* Sesuaikan padding untuk memberikan ruang bagi header/footer di gambar A4 Anda */
+              padding-top: 50mm; /* Contoh: Ruang untuk bagian header dari gambar A4 Anda */
+              padding-bottom: 30mm; /* Contoh: Ruang untuk bagian footer dari gambar A4 Anda */
+              padding-left: 20px; 
+              padding-right: 20px; 
+              
+              /* Pastikan area konten berwarna putih agar teks mudah dibaca */
+              background: rgba(255, 255, 255, 1); /* Latar belakang putih solid untuk konten */
+              margin: 0; /* Hapus margin eksternal */
               border-radius: 0; 
-            }
-
-            .print-footer-image {
-                width: 210mm; /* Lebar kertas A4 */
-                height: 20mm; /* Sesuaikan tinggi footer Anda */
-                display: block;
-                margin: 0 auto;
-                object-fit: cover;
-                position: absolute;
-                bottom: 0;
-                left: 0;
+              box-shadow: none;
+              /* Tinggi minimum yang disesuaikan untuk area konten */
+              min-height: calc(297mm - (50mm + 30mm)); /* Tinggi A4 - (padding-top + padding-bottom) */
             }
             
             .header { 
@@ -174,14 +170,14 @@ export const ResultsDisplay = ({ results }: ResultsDisplayProps) => {
               tr { page-break-inside: avoid; }
               .content-wrapper {
                 box-shadow: none;
-                background: rgba(255, 255, 255, 1) !important; /* Pastikan ini putih solid di cetakan */
+                background: rgba(255, 255, 255, 1) !important; /* Paksa latar belakang putih untuk konten */
+                -webkit-print-color-adjust: exact !important; 
+                print-color-adjust: exact !important;
               }
             }
           </style>
         </head>
         <body>
-          <img src="/lovable-uploads/61ff049b-f848-427a-8634-9504d5931b26.png" class="print-header-image" alt="Kop Surat Yayasan As-Salam Joglo" />
-          
           <div class="content-wrapper">
             <div class="header">
               <h1>Hasil Evaluasi Kinerja Karyawan</h1>
@@ -258,8 +254,7 @@ export const ResultsDisplay = ({ results }: ResultsDisplayProps) => {
               ` : '<p><em>Semua karyawan memenuhi standar minimum</em></p>'}
             </div>
           </div>
-
-          </body>
+        </body>
       </html>
     `);
 
