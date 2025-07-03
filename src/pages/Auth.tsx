@@ -63,9 +63,9 @@ const Auth = () => {
       <div className="w-full max-w-md">
         <div className="text-center mb-8">
           <h1 className="text-3xl font-bold text-gray-800 mb-2">
-            Sistem Evaluasi Kinerja
+            Sistem Evaluasi Kinerja Karyawan
           </h1>
-          <p className="text-gray-600">Yayasan As-Salam</p>
+          <p className="text-gray-600">Yayasan As-Salam Joglo</p>
         </div>
 
         <Card className="bg-white shadow-lg">
