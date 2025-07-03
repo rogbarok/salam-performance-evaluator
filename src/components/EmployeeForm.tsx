@@ -31,22 +31,25 @@ export const EmployeeForm = ({ onAddEmployee, employees, criteriaUpdateTrigger }
   const [loading, setLoading] = useState(false);
   const { toast } = useToast();
   
-  // Dynamic form data based on criteria
-  const [formData, setFormData] = useState<{ [key: string]: number }>({
-    kualitasKerja: 1,
-    tanggungJawab: 1,
-    kuantitasKerja: 1,
-    pemahamanTugas: 1,
-    inisiatif: 1,
-    kerjasama: 1,
-    hariAlpa: 0,
-    keterlambatan: 0,
-    hariIzin: 0,
-    hariSakit: 0,
-    pulangCepat: 0,
-    prestasi: 0,
-    suratPeringatan: 0
-  });
+  // Dynamic form data based on criteria - initialize with all possible fields
+  const [formData, setFormData] = useState<{ [key: string]: number }>({});
+
+  // Mapping dari nama kriteria di database ke field evaluasi
+  const criteriaMapping: { [key: string]: string } = {
+    'Kualitas Kerja': 'kualitasKerja',
+    'Tanggung Jawab': 'tanggungJawab',
+    'Kuantitas Kerja': 'kuantitasKerja',
+    'Pemahaman Tugas': 'pemahamanTugas',
+    'Inisiatif': 'inisiatif',
+    'Kerjasama': 'kerjasama',
+    'Jumlah Hari Alpa': 'hariAlpa',
+    'Jumlah Keterlambatan': 'keterlambatan',
+    'Jumlah Hari Izin': 'hariIzin',
+    'Jumlah Hari Sakit': 'hariSakit',
+    'Pulang Cepat': 'pulangCepat',
+    'Prestasi': 'prestasi',
+    'Surat Peringatan': 'suratPeringatan'
+  };
 
   const fetchCriteria = async () => {
     try {
@@ -68,19 +71,46 @@ export const EmployeeForm = ({ onAddEmployee, employees, criteriaUpdateTrigger }
         
         // Initialize form data with default values for all criteria
         const newFormData: { [key: string]: number } = {};
+        
+        // Set default values for all known criteria fields
+        const defaultValues = {
+          kualitasKerja: 1,
+          tanggungJawab: 1,
+          kuantitasKerja: 1,
+          pemahamanTugas: 1,
+          inisiatif: 1,
+          kerjasama: 1,
+          hariAlpa: 0,
+          keterlambatan: 0,
+          hariIzin: 0,
+          hariSakit: 0,
+          pulangCepat: 0,
+          prestasi: 0,
+          suratPeringatan: 0
+        };
+
+        // Apply default values
+        Object.assign(newFormData, defaultValues);
+
+        // Add any additional criteria from database
         (criteriaData || []).forEach(criterion => {
-          const fieldName = criterion.name.toLowerCase().replace(/\s+/g, '');
-          // Set default values based on criterion type
-          if (criterion.category === 'A. Kinerja Inti') {
-            newFormData[fieldName] = 1; // Default rating 1-5
-          } else if (criterion.category === 'B. Kedisiplinan') {
-            newFormData[fieldName] = 0; // Default count 0
-          } else if (criterion.category === 'C. Faktor Tambahan') {
-            newFormData[fieldName] = 0; // Default binary 0/1
+          const fieldName = criteriaMapping[criterion.name];
+          if (fieldName && !(fieldName in newFormData)) {
+            // Set default values based on criterion type and category
+            if (criterion.category === 'A. Kinerja Inti') {
+              newFormData[fieldName] = 1; // Default rating 1-5
+            } else if (criterion.category === 'B. Kedisiplinan') {
+              newFormData[fieldName] = 0; // Default count 0
+            } else if (criterion.category === 'C. Faktor Tambahan') {
+              newFormData[fieldName] = 0; // Default binary 0/1
+            } else {
+              newFormData[fieldName] = 0; // Default fallback
+            }
           }
         });
         
-        setFormData(prev => ({ ...prev, ...newFormData }));
+        setFormData(newFormData);
+        console.log('Form data initialized:', newFormData);
       }
     } catch (error) {
       console.error('Error fetching criteria:', error);
@@ -182,25 +212,30 @@ export const EmployeeForm = ({ onAddEmployee, employees, criteriaUpdateTrigger }
 
     setLoading(true);
     try {
+      // Prepare evaluation data with proper field mapping
+      const evaluationData = {
+        employee_id: selectedEmployeeId,
+        kualitas_kerja: formData.kualitasKerja || 1,
+        tanggung_jawab: formData.tanggungJawab || 1,
+        kuantitas_kerja: formData.kuantitasKerja || 1,
+        pemahaman_tugas: formData.pemahamanTugas || 1,
+        inisiatif: formData.inisiatif || 1,
+        kerjasama: formData.kerjasama || 1,
+        hari_alpa: formData.hariAlpa || 0,
+        keterlambatan: formData.keterlambatan || 0,
+        hari_izin: formData.hariIzin || 0,
+        hari_sakit: formData.hariSakit || 0,
+        pulang_cepat: formData.pulangCepat || 0,
+        prestasi: formData.prestasi || 0,
+        surat_peringatan: formData.suratPeringatan || 0
+      };
+
+      console.log('Saving evaluation data:', evaluationData);
+
       // Save to database
       const { data, error } = await supabase
         .from('employee_evaluations')
-        .insert([{
-          employee_id: selectedEmployeeId,
-          kualitas_kerja: formData.kualitasKerja,
-          tanggung_jawab: formData.tanggungJawab,
-          kuantitas_kerja: formData.kuantitasKerja,
-          pemahaman_tugas: formData.pemahamanTugas,
-          inisiatif: formData.inisiatif,
-          kerjasama: formData.kerjasama,
-          hari_alpa: formData.hariAlpa,
-          keterlambatan: formData.keterlambatan,
-          hari_izin: formData.hariIzin,
-          hari_sakit: formData.hariSakit,
-          pulang_cepat: formData.pulangCepat,
-          prestasi: formData.prestasi,
-          surat_peringatan: formData.suratPeringatan
-        }])
+        .insert([evaluationData])
         .select()
         .single();
 
@@ -210,26 +245,25 @@ export const EmployeeForm = ({ onAddEmployee, employees, criteriaUpdateTrigger }
       const newEmployee: Employee = {
         id: selectedEmployee.id,
         name: selectedEmployee.name,
-        kualitasKerja: formData.kualitasKerja,
-        tanggungJawab: formData.tanggungJawab,
-        kuantitasKerja: formData.kuantitasKerja,
-        pemahamanTugas: formData.pemahamanTugas,
-        inisiatif: formData.inisiatif,
-        kerjasama: formData.kerjasama,
-        hariAlpa: formData.hariAlpa,
-        keterlambatan: formData.keterlambatan,
-        hariIzin: formData.hariIzin,
-        hariSakit: formData.hariSakit,
-        pulangCepat: formData.pulangCepat,
-        prestasi: formData.prestasi,
-        suratPeringatan: formData.suratPeringatan
+        kualitasKerja: evaluationData.kualitas_kerja,
+        tanggungJawab: evaluationData.tanggung_jawab,
+        kuantitasKerja: evaluationData.kuantitas_kerja,
+        pemahamanTugas: evaluationData.pemahaman_tugas,
+        inisiatif: evaluationData.inisiatif,
+        kerjasama: evaluationData.kerjasama,
+        hariAlpa: evaluationData.hari_alpa,
+        keterlambatan: evaluationData.keterlambatan,
+        hariIzin: evaluationData.hari_izin,
+        hariSakit: evaluationData.hari_sakit,
+        pulangCepat: evaluationData.pulang_cepat,
+        prestasi: evaluationData.prestasi,
+        suratPeringatan: evaluationData.surat_peringatan
       };
 
       onAddEmployee(newEmployee);
       
-      // Reset form
-      setSelectedEmployeeId("");
-      setFormData({
+      // Reset form to default values
+      const defaultValues = {
         kualitasKerja: 1,
         tanggungJawab: 1,
         kuantitasKerja: 1,
@@ -243,7 +277,9 @@ export const EmployeeForm = ({ onAddEmployee, employees, criteriaUpdateTrigger }
         pulangCepat: 0,
         prestasi: 0,
         suratPeringatan: 0
-      });
+      };
+      setFormData(defaultValues);
+      setSelectedEmployeeId("");
 
       toast({
         title: "Berhasil",
@@ -560,7 +596,12 @@ export const EmployeeForm = ({ onAddEmployee, employees, criteriaUpdateTrigger }
                     <h3 className="text-lg font-semibold text-gray-800">{category}</h3>
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                       {criteriaList.map((criterion) => {
-                        const fieldName = criterion.name.toLowerCase().replace(/\s+/g, '');
+                        const fieldName = criteriaMapping[criterion.name];
+                        if (!fieldName) {
+                          console.warn(`No mapping found for criterion: ${criterion.name}`);
+                          return null;
+                        }
+                        
                         const currentValue = formData[fieldName] || 0;
                         
                         return (
@@ -572,7 +613,7 @@ export const EmployeeForm = ({ onAddEmployee, employees, criteriaUpdateTrigger }
                               id={fieldName}
                               type="number"
                               min={criterion.category === 'A. Kinerja Inti' ? "1" : "0"}
-                              max={criterion.scale.includes('1-5') ? "5" : criterion.scale.includes('0-1') ? "1" : "10"}
+                              max={criterion.scale.includes('1-5') ? "5" : criterion.scale.includes('0-1') || criterion.scale.includes('0/1') ? "1" : "10"}
                               value={currentValue}
                               onChange={(e) => handleInputChange(fieldName as keyof typeof formData, parseInt(e.target.value) || 0)}
                             />

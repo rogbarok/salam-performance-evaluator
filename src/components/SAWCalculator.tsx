@@ -442,16 +442,6 @@ export const SAWCalculator = ({ employees, onCalculate, criteriaUpdateTrigger }:
     }
   }, [criteriaUpdateTrigger]);
 
-  // Function to convert form score (1-5) to a scale (e.g., 20-100)
-  const convertFormScoreToScale = (score: number): number => {
-    return score * 20; // Assuming a linear scale from 20 to 100
-  };
-
-  // Function to convert SAW score back to form scale (1-5)
-  const convertSAWScoreToFormScale = (sawScore: number): number => {
-    return Math.max(1, Math.min(5, Math.round(sawScore * 5)));
-  };
-
   const calculateSAW = async () => {
     if (employees.length === 0) {
       toast({
@@ -558,8 +548,9 @@ export const SAWCalculator = ({ employees, onCalculate, criteriaUpdateTrigger }:
 
         console.log(`Final SAW score for ${employee.name}:`, finalScore.toFixed(4));
 
-        const convertedScore = Math.max(1, Math.min(5, finalScore * 5));
-        console.log(`Converted score for ${employee.name}: ${finalScore.toFixed(4)} -> ${convertedScore.toFixed(2)}`);
+        // PERBAIKAN: Konversi skor yang lebih akurat
+        const convertedScore = parseFloat((finalScore * 5).toFixed(2));
+        console.log(`Converted score for ${employee.name}: ${finalScore.toFixed(4)} -> ${convertedScore}`);
         
         const isAutoTerminated = employee.hariAlpa > 10;
         
@@ -792,13 +783,13 @@ export const SAWCalculator = ({ employees, onCalculate, criteriaUpdateTrigger }:
                   <p><strong>C4:</strong> Pemahaman Tugas (Benefit)</p>
                   <p><strong>C5:</strong> Inisiatif (Benefit)</p>
                   <p><strong>C6:</strong> Kerjasama (Benefit)</p>
-                  <p><strong>C7:</strong> Hari Alpa (Cost) - <span className="text-red-600">Jika &gt; 0 → 0.000</span></p>
+                  <p><strong>C7:</strong> Hari Alpa (Cost) - <span className="text-red-600">Jika > 0 → 0.000</span></p>
                 </div>
                 <div className="space-y-1">
-                  <p><strong>C8:</strong> Keterlambatan (Cost) - <span className="text-red-600">Jika &gt; 0 → 0.000</span></p>
-                  <p><strong>C9:</strong> Hari Izin (Cost) - <span className="text-red-600">Jika &gt; 0 → 0.000</span></p>
-                  <p><strong>C10:</strong> Hari Sakit (Cost) - <span className="text-red-600">Jika &gt; 0 → 0.000</span></p>
-                  <p><strong>C11:</strong> Pulang Cepat (Cost) - <span className="text-red-600">Jika &gt; 0 → 0.000</span></p>
+                  <p><strong>C8:</strong> Keterlambatan (Cost) - <span className="text-red-600">Jika > 0 → 0.000</span></p>
+                  <p><strong>C9:</strong> Hari Izin (Cost) - <span className="text-red-600">Jika > 0 → 0.000</span></p>
+                  <p><strong>C10:</strong> Hari Sakit (Cost) - <span className="text-red-600">Jika > 0 → 0.000</span></p>
+                  <p><strong>C11:</strong> Pulang Cepat (Cost) - <span className="text-red-600">Jika > 0 → 0.000</span></p>
                   <p><strong>C12:</strong> Prestasi (Benefit) - <span className="text-green-600">1 → 1.000, 0 → 0.000</span></p>
                   <p><strong>C13:</strong> Surat Peringatan (Cost) - <span className="text-red-600">0 → 1.000, 1 → 0.000</span></p>
                 </div>
@@ -817,7 +808,7 @@ export const SAWCalculator = ({ employees, onCalculate, criteriaUpdateTrigger }:
                 </div>
                 <div className="mt-2">
                   <strong>Cost Criteria (C7-C13):</strong>
-                  <p>• Cost Criteria (C7-C11): Rij = 0.000 jika nilai &gt; 0, Rij = 1.000 jika nilai = 0</p>
+                  <p>• Cost Criteria (C7-C11): Rij = 0.000 jika nilai > 0, Rij = 1.000 jika nilai = 0</p>
                   <p>• Surat Peringatan (C13): Rij = 1.000 jika nilai = 0, Rij = 0.000 jika nilai = 1</p>
                 </div>
               </div>
@@ -934,7 +925,7 @@ export const SAWCalculator = ({ employees, onCalculate, criteriaUpdateTrigger }:
                       <TableCell className="font-medium">{result.employee.name}</TableCell>
                       <TableCell>{result.finalScore.toFixed(4)}</TableCell>
                       <TableCell>
-                        {result.rank === 999 ? '-' : `${result.convertedScore} (${getScoreLabel(result.convertedScore)})`}
+                        {result.rank === 999 ? '-' : `${result.convertedScore.toFixed(2)} (${getScoreLabel(result.convertedScore)})`}
                       </TableCell>
                       <TableCell>{result.recommendation}</TableCell>
                       <TableCell>{result.note || '-'}</TableCell>
