@@ -19,7 +19,7 @@ interface CriteriaManagementProps {
 const CATEGORY_TOTALS = {
   "A. Kinerja Inti": 60,
   "B. Kedisiplinan": 25,
-  "C. Prestasi": 15
+  "C. Faktor Tambahan": 15
 };
 
 export const CriteriaManagement = ({ onCriteriaChange }: CriteriaManagementProps) => {
