@@ -313,13 +313,10 @@ const Index = () => {
           <h1 className="text-4xl font-bold text-gray-800 mb-2">
             Sistem Evaluasi Kinerja Karyawan
           </h1>
-          <p className="text-xl text-gray-600 mb-4">Yayasan As-Salam</p>
+          <p className="text-xl text-gray-600 mb-4">Yayasan As-Salam Joglo</p>
           <div className="flex justify-center gap-2">
             <Badge variant="secondary" className="bg-green-100 text-green-800">
               Metode Simple Additive Weighting (SAW)
-            </Badge>
-            <Badge variant="outline" className="text-purple-600 border-purple-600">
-              Struktur Database Fleksibel
             </Badge>
           </div>
         </div>
