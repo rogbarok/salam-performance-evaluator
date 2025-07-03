@@ -16,9 +16,9 @@ export const Navbar = () => {
         <div className="flex justify-between items-center">
           <div>
             <h1 className="text-xl font-bold text-gray-800">
-              Sistem Evaluasi Kinerja
+              Sistem Evaluasi Kinerja Karyawan
             </h1>
-            <p className="text-sm text-gray-600">Yayasan As-Salam</p>
+            <p className="text-sm text-gray-600">Yayasan As-Salam Joglo</p>
           </div>
           
           {user && (
