@@ -32,6 +32,8 @@ export interface Employee {
   pulangCepat: number;
   prestasi: number;
   suratPeringatan: number;
+  // Dynamic properties for new criteria
+  [key: string]: any;
 }
 
 export interface SAWResult {
@@ -95,7 +97,7 @@ const Index = () => {
           const employee: Employee = {
             id: result.employees.id,
             name: result.employees.name,
-            // These values will be loaded separately from employee_evaluations
+            // These values will be loaded separately from evaluation_scores
             kualitasKerja: 0,
             tanggungJawab: 0,
             kuantitasKerja: 0,
@@ -135,42 +137,102 @@ const Index = () => {
     }
   };
 
-  // Load data from database
+  // Load data from database using the new flexible structure
   const loadDataFromDatabase = async () => {
     setLoading(true);
     try {
-      // Load employees and their evaluations
-      const { data: evaluationsData, error: evalError } = await supabase
-        .from('employee_evaluations')
+      // Load employees and their evaluation scores using the new flexible structure
+      const { data: evaluationScoresData, error: evalError } = await supabase
+        .from('evaluation_scores')
         .select(`
           *,
-          employees!inner(id, name, position, department)
+          employees!inner(id, name, position, department),
+          criteria!inner(id, name, type, weight, category, scale)
         `);
 
       if (evalError) {
-        console.error('Error fetching evaluations:', evalError);
+        console.error('Error fetching evaluation scores:', evalError);
       } else {
-        // Convert database evaluations to Employee format
-        const convertedEmployees: Employee[] = (evaluationsData || []).map(evaluation => ({
-          id: evaluation.employees.id,
-          name: evaluation.employees.name,
-          kualitasKerja: evaluation.kualitas_kerja,
-          tanggungJawab: evaluation.tanggung_jawab,
-          kuantitasKerja: evaluation.kuantitas_kerja,
-          pemahamanTugas: evaluation.pemahaman_tugas,
-          inisiatif: evaluation.inisiatif,
-          kerjasama: evaluation.kerjasama,
-          hariAlpa: evaluation.hari_alpa,
-          keterlambatan: evaluation.keterlambatan,
-          hariIzin: evaluation.hari_izin,
-          hariSakit: evaluation.hari_sakit,
-          pulangCepat: evaluation.pulang_cepat,
-          prestasi: evaluation.prestasi,
-          suratPeringatan: evaluation.surat_peringatan  
-        }));
+        // Convert flexible evaluation scores to Employee format for backward compatibility
+        const employeeMap = new Map<string, Employee>();
 
+        (evaluationScoresData || []).forEach(score => {
+          const employeeId = score.employee_id;
+          
+          if (!employeeMap.has(employeeId)) {
+            employeeMap.set(employeeId, {
+              id: employeeId,
+              name: score.employees.name,
+              // Initialize with default values
+              kualitasKerja: 1,
+              tanggungJawab: 1,
+              kuantitasKerja: 1,
+              pemahamanTugas: 1,
+              inisiatif: 1,
+              kerjasama: 1,
+              hariAlpa: 0,
+              keterlambatan: 0,
+              hariIzin: 0,
+              hariSakit: 0,
+              pulangCepat: 0,
+              prestasi: 0,
+              suratPeringatan: 0
+            });
+          }
+
+          const employee = employeeMap.get(employeeId)!;
+          
+          // Map criteria to employee fields (for backward compatibility)
+          switch (score.criteria.name) {
+            case 'Kualitas Kerja':
+              employee.kualitasKerja = score.score;
+              break;
+            case 'Tanggung Jawab':
+              employee.tanggungJawab = score.score;
+              break;
+            case 'Kuantitas Kerja':
+              employee.kuantitasKerja = score.score;
+              break;
+            case 'Pemahaman Tugas':
+              employee.pemahamanTugas = score.score;
+              break;
+            case 'Inisiatif':
+              employee.inisiatif = score.score;
+              break;
+            case 'Kerjasama':
+              employee.kerjasama = score.score;
+              break;
+            case 'Jumlah Hari Alpa':
+              employee.hariAlpa = score.score;
+              break;
+            case 'Jumlah Keterlambatan':
+              employee.keterlambatan = score.score;
+              break;
+            case 'Jumlah Hari Izin':
+              employee.hariIzin = score.score;
+              break;
+            case 'Jumlah Hari Sakit':
+              employee.hariSakit = score.score;
+              break;
+            case 'Pulang Cepat':
+              employee.pulangCepat = score.score;
+              break;
+            case 'Prestasi':
+              employee.prestasi = score.score;
+              break;
+            case 'Surat Peringatan':
+              employee.suratPeringatan = score.score;
+              break;
+            // Kriteria baru akan ditambahkan sebagai properti dinamis
+            default:
+              employee[score.criteria.name] = score.score;
+              break;
+          }
+        });
+
+        const convertedEmployees = Array.from(employeeMap.values());
         setEmployees(convertedEmployees);
-        console.log('Loaded employees with evaluations:', convertedEmployees.length);
+        console.log('Loaded employees with flexible evaluation scores:', convertedEmployees.length);
       }
 
       // Load criteria count
@@ -252,9 +314,14 @@ const Index = () => {
             Sistem Evaluasi Kinerja Karyawan
           </h1>
           <p className="text-xl text-gray-600 mb-4">Yayasan As-Salam</p>
-          <Badge variant="secondary" className="bg-green-100 text-green-800">
-            Metode Simple Additive Weighting (SAW)
-          </Badge>
+          <div className="flex justify-center gap-2">
+            <Badge variant="secondary" className="bg-green-100 text-green-800">
+              Metode Simple Additive Weighting (SAW)
+            </Badge>
+            <Badge variant="outline" className="text-purple-600 border-purple-600">
+              Struktur Database Fleksibel
+            </Badge>
+          </div>
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-8">
@@ -278,7 +345,7 @@ const Index = () => {
                 <div className="ml-4">
                   <p className="text-sm font-medium text-gray-600">Kriteria</p>
                   <p className="text-2xl font-bold text-gray-900">{totalCriteria}</p>
-                  <p className="text-xs text-gray-500">Dari database</p>
+                  <p className="text-xs text-gray-500">Fleksibel</p>
                 </div>
               </div>
             </CardContent>
@@ -306,7 +373,7 @@ const Index = () => {
                   <p className="text-2xl font-bold text-gray-900">
                     {results.filter(r => r.convertedScore < 3).length}
                   </p>
-                  <p className="text-xs text-gray-500">Skor &lt; 3</p>
+                  <p className="text-xs text-gray-500">Skor < 3</p>
                 </div>
               </div>
             </CardContent>

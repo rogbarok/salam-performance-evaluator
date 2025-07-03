@@ -1,4 +1,3 @@
-
 export interface Employee {
   id: string;
   name: string;
@@ -46,5 +45,26 @@ export interface EmployeeEvaluation {
     department: string;
     email: string;
     hire_date: string;
+  };
+}
+
+// Tabel baru untuk sistem evaluasi yang fleksibel
+export interface EvaluationScore {
+  id: string;
+  employee_id: string;
+  criteria_id: string;
+  score: number;
+  created_at?: string;
+  updated_at?: string;
+  criteria?: Criteria;
+  employees?: Employee;
+}
+
+// Interface untuk data evaluasi yang sudah di-join
+export interface EmployeeEvaluationData {
+  employee_id: string;
+  employee_name: string;
+  scores: {
+    [criteria_id: string]: number;
   };
 }

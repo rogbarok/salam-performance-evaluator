@@ -143,6 +143,48 @@ export type Database = {
         }
         Relationships: []
       }
+      evaluation_scores: {
+        Row: {
+          created_at: string
+          criteria_id: string
+          employee_id: string
+          id: string
+          score: number
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          criteria_id: string
+          employee_id: string
+          id?: string
+          score?: number
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          criteria_id?: string
+          employee_id?: string
+          id?: string
+          score?: number
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "evaluation_scores_criteria_id_fkey"
+            columns: ["criteria_id"]
+            isOneToOne: false
+            referencedRelation: "criteria"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "evaluation_scores_employee_id_fkey"
+            columns: ["employee_id"]
+            isOneToOne: false
+            referencedRelation: "employees"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       saw_calculations: {
         Row: {
           calculation_date: string

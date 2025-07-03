@@ -10,7 +10,7 @@ import { UserPlus, User, Eye, Edit, Trash2 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { EditEmployeeDialog } from "@/components/EditEmployeeDialog";
-import type { Employee as DBEmployee, EmployeeEvaluation, Criteria } from "@/types/database";
+import type { Employee as DBEmployee, Criteria, EvaluationScore } from "@/types/database";
 import type { Employee, SAWResult } from "@/pages/Index";
 
 interface EmployeeFormProps {
@@ -21,7 +21,7 @@ interface EmployeeFormProps {
 
 export const EmployeeForm = ({ onAddEmployee, employees, criteriaUpdateTrigger }: EmployeeFormProps) => {
   const [dbEmployees, setDbEmployees] = useState<DBEmployee[]>([]);
-  const [evaluations, setEvaluations] = useState<EmployeeEvaluation[]>([]);
+  const [evaluationScores, setEvaluationScores] = useState<EvaluationScore[]>([]);
   const [criteria, setCriteria] = useState<Criteria[]>([]);
   const [selectedEmployeeId, setSelectedEmployeeId] = useState<string>("");
   const [selectedEmployeeForDetail, setSelectedEmployeeForDetail] = useState<Employee | null>(null);
@@ -32,41 +32,7 @@ export const EmployeeForm = ({ onAddEmployee, employees, criteriaUpdateTrigger }
   const { toast } = useToast();
   
   // Dynamic form data - akan diisi berdasarkan kriteria dari database
-  const [formData, setFormData] = useState<{ [key: string]: number }>({});
-
-  // Fungsi untuk mengkonversi nama kriteria menjadi field name yang konsisten
-  const createFieldName = (criteriaName: string): string => {
-    return criteriaName
-      .toLowerCase()
-      .replace(/[^a-z0-9\s]/g, '') // Hapus karakter khusus
-      .replace(/\s+/g, '_') // Ganti spasi dengan underscore
-      .replace(/^_+|_+$/g, '') // Hapus underscore di awal/akhir
-      .replace(/_+/g, '_'); // Ganti multiple underscore dengan single
-  };
-
-  // Mapping dinamis dari nama kriteria ke field database
-  const createDatabaseFieldMapping = (criteriaName: string): string => {
-    const fieldName = createFieldName(criteriaName);
-    
-    // Mapping khusus untuk kriteria yang sudah ada di database
-    const specialMappings: { [key: string]: string } = {
-      'kualitas_kerja': 'kualitas_kerja',
-      'tanggung_jawab': 'tanggung_jawab',
-      'kuantitas_kerja': 'kuantitas_kerja',
-      'pemahaman_tugas': 'pemahaman_tugas',
-      'inisiatif': 'inisiatif',
-      'kerjasama': 'kerjasama',
-      'jumlah_hari_alpa': 'hari_alpa',
-      'jumlah_keterlambatan': 'keterlambatan',
-      'jumlah_hari_izin': 'hari_izin',
-      'jumlah_hari_sakit': 'hari_sakit',
-      'pulang_cepat': 'pulang_cepat',
-      'prestasi': 'prestasi',
-      'surat_peringatan': 'surat_peringatan'
-    };
-
-    return specialMappings[fieldName] || fieldName;
-  };
+  const [formData, setFormData] = useState<{ [criteria_id: string]: number }>({});
 
   const fetchCriteria = async () => {
     try {
@@ -87,22 +53,20 @@ export const EmployeeForm = ({ onAddEmployee, employees, criteriaUpdateTrigger }
         console.log('EmployeeForm: Criteria loaded:', criteriaData?.length || 0);
         
         // Initialize form data dengan semua kriteria dari database
-        const newFormData: { [key: string]: number } = {};
+        const newFormData: { [criteria_id: string]: number } = {};
         
         (criteriaData || []).forEach(criterion => {
-          const fieldName = createFieldName(criterion.name);
-          
           // Set default values berdasarkan tipe dan kategori kriteria
           if (criterion.type === 'Benefit') {
             if (criterion.scale.includes('1-5')) {
-              newFormData[fieldName] = 1; // Default untuk skala 1-5
+              newFormData[criterion.id] = 1; // Default untuk skala 1-5
             } else if (criterion.scale.includes('0-1') || criterion.scale.includes('0/1')) {
-              newFormData[fieldName] = 0; // Default untuk binary
+              newFormData[criterion.id] = 0; // Default untuk binary
             } else {
-              newFormData[fieldName] = 1; // Default fallback untuk benefit
+              newFormData[criterion.id] = 1; // Default fallback untuk benefit
             }
           } else { // Cost criteria
-            newFormData[fieldName] = 0; // Default untuk cost criteria
+            newFormData[criterion.id] = 0; // Default untuk cost criteria
           }
         });
         
@@ -146,29 +110,113 @@ export const EmployeeForm = ({ onAddEmployee, employees, criteriaUpdateTrigger }
     }
   };
 
-  const fetchEvaluations = async () => {
+  const fetchEvaluationScores = async () => {
     try {
       const { data, error } = await supabase
-        .from('employee_evaluations')
+        .from('evaluation_scores')
         .select(`
           *,
-          employees!inner(id, name, position, department, email, hire_date)
+          employees!inner(id, name, position, department, email, hire_date),
+          criteria!inner(id, name, type, weight, category, scale)
         `);
       
       if (error) {
-        console.error('Error fetching evaluations:', error);
+        console.error('Error fetching evaluation scores:', error);
         toast({
           title: "Error",
           description: "Gagal mengambil data evaluasi dari database",
           variant: "destructive",
         });
       } else {
-        setEvaluations(data || []);
-        console.log('Evaluations fetched successfully:', data?.length || 0);
+        setEvaluationScores(data || []);
+        console.log('Evaluation scores fetched successfully:', data?.length || 0);
       }
     } catch (error) {
-      console.error('Network error fetching evaluations:', error);
+      console.error('Network error fetching evaluation scores:', error);
     }
+  };
+
+  // Convert evaluation scores to Employee format for compatibility
+  const convertEvaluationScoresToEmployees = (): Employee[] => {
+    const employeeMap = new Map<string, Employee>();
+
+    evaluationScores.forEach(score => {
+      if (!score.employees || !score.criteria) return;
+
+      const employeeId = score.employee_id;
+      
+      if (!employeeMap.has(employeeId)) {
+        employeeMap.set(employeeId, {
+          id: employeeId,
+          name: score.employees.name,
+          // Initialize with default values
+          kualitasKerja: 1,
+          tanggungJawab: 1,
+          kuantitasKerja: 1,
+          pemahamanTugas: 1,
+          inisiatif: 1,
+          kerjasama: 1,
+          hariAlpa: 0,
+          keterlambatan: 0,
+          hariIzin: 0,
+          hariSakit: 0,
+          pulangCepat: 0,
+          prestasi: 0,
+          suratPeringatan: 0
+        });
+      }
+
+      const employee = employeeMap.get(employeeId)!;
+      
+      // Map criteria to employee fields (for backward compatibility)
+      switch (score.criteria.name) {
+        case 'Kualitas Kerja':
+          employee.kualitasKerja = score.score;
+          break;
+        case 'Tanggung Jawab':
+          employee.tanggungJawab = score.score;
+          break;
+        case 'Kuantitas Kerja':
+          employee.kuantitasKerja = score.score;
+          break;
+        case 'Pemahaman Tugas':
+          employee.pemahamanTugas = score.score;
+          break;
+        case 'Inisiatif':
+          employee.inisiatif = score.score;
+          break;
+        case 'Kerjasama':
+          employee.kerjasama = score.score;
+          break;
+        case 'Jumlah Hari Alpa':
+          employee.hariAlpa = score.score;
+          break;
+        case 'Jumlah Keterlambatan':
+          employee.keterlambatan = score.score;
+          break;
+        case 'Jumlah Hari Izin':
+          employee.hariIzin = score.score;
+          break;
+        case 'Jumlah Hari Sakit':
+          employee.hariSakit = score.score;
+          break;
+        case 'Pulang Cepat':
+          employee.pulangCepat = score.score;
+          break;
+        case 'Prestasi':
+          employee.prestasi = score.score;
+          break;
+        case 'Surat Peringatan':
+          employee.suratPeringatan = score.score;
+          break;
+        // Kriteria baru akan ditambahkan sebagai properti dinamis
+        default:
+          (employee as any)[score.criteria.name] = score.score;
+          break;
+      }
+    });
+
+    return Array.from(employeeMap.values());
   };
 
   // Reload criteria when criteriaUpdateTrigger changes
@@ -178,12 +226,12 @@ export const EmployeeForm = ({ onAddEmployee, employees, criteriaUpdateTrigger }
 
   // Auto-refresh evaluations when employees prop changes
   useEffect(() => {
-    fetchEvaluations();
+    fetchEvaluationScores();
   }, [employees]);
 
   useEffect(() => {
     fetchEmployees();
-    fetchEvaluations();
+    fetchEvaluationScores();
     fetchCriteria();
   }, []);
 
@@ -210,29 +258,23 @@ export const EmployeeForm = ({ onAddEmployee, employees, criteriaUpdateTrigger }
 
     setLoading(true);
     try {
-      // Prepare evaluation data dengan mapping dinamis ke field database
-      const evaluationData: any = {
+      // Prepare evaluation scores data
+      const evaluationScoresData = criteria.map(criterion => ({
         employee_id: selectedEmployeeId,
-      };
+        criteria_id: criterion.id,
+        score: formData[criterion.id] || 0
+      }));
 
-      // Map semua form data ke field database yang sesuai
-      criteria.forEach(criterion => {
-        const formFieldName = createFieldName(criterion.name);
-        const dbFieldName = createDatabaseFieldMapping(criterion.name);
-        const value = formData[formFieldName] || 0;
-        
-        evaluationData[dbFieldName] = value;
-        console.log(`Mapping: ${criterion.name} -> ${formFieldName} -> ${dbFieldName} = ${value}`);
-      });
+      console.log('Saving evaluation scores:', evaluationScoresData);
 
-      console.log('Saving evaluation data:', evaluationData);
-
-      // Save to database
+      // Save to database using the new flexible structure
       const { data, error } = await supabase
-        .from('employee_evaluations')
-        .insert([evaluationData])
-        .select()
-        .single();
+        .from('evaluation_scores')
+        .upsert(evaluationScoresData, { 
+          onConflict: 'employee_id,criteria_id',
+          ignoreDuplicates: false 
+        })
+        .select();
 
       if (error) throw error;
 
@@ -240,36 +282,42 @@ export const EmployeeForm = ({ onAddEmployee, employees, criteriaUpdateTrigger }
       const newEmployee: Employee = {
         id: selectedEmployee.id,
         name: selectedEmployee.name,
-        // Map data kembali ke format Employee interface
-        kualitasKerja: evaluationData.kualitas_kerja || 1,
-        tanggungJawab: evaluationData.tanggung_jawab || 1,
-        kuantitasKerja: evaluationData.kuantitas_kerja || 1,
-        pemahamanTugas: evaluationData.pemahaman_tugas || 1,
-        inisiatif: evaluationData.inisiatif || 1,
-        kerjasama: evaluationData.kerjasama || 1,
-        hariAlpa: evaluationData.hari_alpa || 0,
-        keterlambatan: evaluationData.keterlambatan || 0,
-        hariIzin: evaluationData.hari_izin || 0,
-        hariSakit: evaluationData.hari_sakit || 0,
-        pulangCepat: evaluationData.pulang_cepat || 0,
-        prestasi: evaluationData.prestasi || 0,
-        suratPeringatan: evaluationData.surat_peringatan || 0
+        // Map scores back to Employee interface for backward compatibility
+        kualitasKerja: formData[criteria.find(c => c.name === 'Kualitas Kerja')?.id || ''] || 1,
+        tanggungJawab: formData[criteria.find(c => c.name === 'Tanggung Jawab')?.id || ''] || 1,
+        kuantitasKerja: formData[criteria.find(c => c.name === 'Kuantitas Kerja')?.id || ''] || 1,
+        pemahamanTugas: formData[criteria.find(c => c.name === 'Pemahaman Tugas')?.id || ''] || 1,
+        inisiatif: formData[criteria.find(c => c.name === 'Inisiatif')?.id || ''] || 1,
+        kerjasama: formData[criteria.find(c => c.name === 'Kerjasama')?.id || ''] || 1,
+        hariAlpa: formData[criteria.find(c => c.name === 'Jumlah Hari Alpa')?.id || ''] || 0,
+        keterlambatan: formData[criteria.find(c => c.name === 'Jumlah Keterlambatan')?.id || ''] || 0,
+        hariIzin: formData[criteria.find(c => c.name === 'Jumlah Hari Izin')?.id || ''] || 0,
+        hariSakit: formData[criteria.find(c => c.name === 'Jumlah Hari Sakit')?.id || ''] || 0,
+        pulangCepat: formData[criteria.find(c => c.name === 'Pulang Cepat')?.id || ''] || 0,
+        prestasi: formData[criteria.find(c => c.name === 'Prestasi')?.id || ''] || 0,
+        suratPeringatan: formData[criteria.find(c => c.name === 'Surat Peringatan')?.id || ''] || 0
       };
+
+      // Add dynamic criteria as properties
+      criteria.forEach(criterion => {
+        if (!['Kualitas Kerja', 'Tanggung Jawab', 'Kuantitas Kerja', 'Pemahaman Tugas', 'Inisiatif', 'Kerjasama', 'Jumlah Hari Alpa', 'Jumlah Keterlambatan', 'Jumlah Hari Izin', 'Jumlah Hari Sakit', 'Pulang Cepat', 'Prestasi', 'Surat Peringatan'].includes(criterion.name)) {
+          (newEmployee as any)[criterion.name] = formData[criterion.id] || 0;
+        }
+      });
 
       onAddEmployee(newEmployee);
       
       // Reset form dengan nilai default
-      const defaultFormData: { [key: string]: number } = {};
+      const defaultFormData: { [criteria_id: string]: number } = {};
       criteria.forEach(criterion => {
-        const fieldName = createFieldName(criterion.name);
         if (criterion.type === 'Benefit') {
           if (criterion.scale.includes('1-5')) {
-            defaultFormData[fieldName] = 1;
+            defaultFormData[criterion.id] = 1;
           } else {
-            defaultFormData[fieldName] = 0;
+            defaultFormData[criterion.id] = 0;
           }
         } else {
-          defaultFormData[fieldName] = 0;
+          defaultFormData[criterion.id] = 0;
         }
       });
       
@@ -278,10 +326,10 @@ export const EmployeeForm = ({ onAddEmployee, employees, criteriaUpdateTrigger }
 
       toast({
         title: "Berhasil",
-        description: "Data evaluasi karyawan berhasil disimpan",
+        description: "Data evaluasi karyawan berhasil disimpan dengan struktur fleksibel",
       });
 
-      fetchEvaluations();
+      fetchEvaluationScores();
     } catch (error) {
       console.error('Error saving evaluation:', error);
       toast({
@@ -294,10 +342,10 @@ export const EmployeeForm = ({ onAddEmployee, employees, criteriaUpdateTrigger }
     }
   };
 
-  const handleInputChange = (field: string, value: number) => {
+  const handleInputChange = (criteria_id: string, value: number) => {
     setFormData(prev => ({
       ...prev,
-      [field]: value
+      [criteria_id]: value
     }));
   };
 
@@ -313,7 +361,7 @@ export const EmployeeForm = ({ onAddEmployee, employees, criteriaUpdateTrigger }
 
   const handleEmployeeUpdate = async (updatedEmployee: Employee) => {
     // Refresh evaluations from database to get latest data
-    await fetchEvaluations();
+    await fetchEvaluationScores();
     
     // Also update parent component
     onAddEmployee(updatedEmployee);
@@ -330,7 +378,7 @@ export const EmployeeForm = ({ onAddEmployee, employees, criteriaUpdateTrigger }
     setLoading(true);
     try {
       const { error } = await supabase
-        .from('employee_evaluations')
+        .from('evaluation_scores')
         .delete()
         .eq('employee_id', employeeId);
 
@@ -342,7 +390,7 @@ export const EmployeeForm = ({ onAddEmployee, employees, criteriaUpdateTrigger }
       });
 
       // Refresh data
-      await fetchEvaluations();
+      await fetchEvaluationScores();
     } catch (error) {
       console.error('Error deleting evaluation:', error);
       toast({
@@ -355,13 +403,13 @@ export const EmployeeForm = ({ onAddEmployee, employees, criteriaUpdateTrigger }
     }
   };
 
-  // Get evaluated employee IDs
-  const evaluatedEmployeeIds = evaluations.map(evaluation => evaluation.employee_id);
+  // Get evaluated employee IDs from the new flexible structure
+  const evaluatedEmployeeIds = Array.from(new Set(evaluationScores.map(score => score.employee_id)));
   const availableEmployees = dbEmployees.filter(emp => !evaluatedEmployeeIds.includes(emp.id));
 
   console.log('Available employees for selection:', availableEmployees.length);
   console.log('Total DB employees:', dbEmployees.length);
-  console.log('Total evaluations:', evaluations.length);
+  console.log('Total evaluation scores:', evaluationScores.length);
 
   // Group criteria by category for dynamic form rendering
   const groupedCriteria = criteria.reduce((acc, criterion) => {
@@ -380,6 +428,9 @@ export const EmployeeForm = ({ onAddEmployee, employees, criteriaUpdateTrigger }
           <CardTitle className="flex items-center gap-2 text-green-700">
             <User className="w-5 h-5" />
             Data Evaluasi Karyawan ({employees.length})
+            <Badge variant="secondary" className="ml-2">
+              Struktur Fleksibel
+            </Badge>
           </CardTitle>
         </CardHeader>
         <CardContent>
@@ -522,6 +573,19 @@ export const EmployeeForm = ({ onAddEmployee, employees, criteriaUpdateTrigger }
                   )}
                 </div>
               </div>
+
+              {/* Show dynamic criteria if any */}
+              <div className="border-t pt-4">
+                <h4 className="font-semibold text-purple-600 mb-3">Kriteria Tambahan</h4>
+                <div className="grid grid-cols-2 gap-2 text-sm">
+                  {criteria.filter(c => !['Kualitas Kerja', 'Tanggung Jawab', 'Kuantitas Kerja', 'Pemahaman Tugas', 'Inisiatif', 'Kerjasama', 'Jumlah Hari Alpa', 'Jumlah Keterlambatan', 'Jumlah Hari Izin', 'Jumlah Hari Sakit', 'Pulang Cepat', 'Prestasi', 'Surat Peringatan'].includes(c.name)).map(criterion => (
+                    <div key={criterion.id} className="flex justify-between">
+                      <span>{criterion.name}:</span>
+                      <span className="font-medium">{(selectedEmployeeForDetail as any)[criterion.name] || 0}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
             </div>
           )}
         </DialogContent>
@@ -546,6 +610,9 @@ export const EmployeeForm = ({ onAddEmployee, employees, criteriaUpdateTrigger }
                 {criteria.length} Kriteria Dimuat
               </Badge>
             )}
+            <Badge variant="outline" className="ml-2 text-purple-600 border-purple-600">
+              Sistem Fleksibel
+            </Badge>
           </CardTitle>
         </CardHeader>
         <CardContent>
@@ -591,24 +658,23 @@ export const EmployeeForm = ({ onAddEmployee, employees, criteriaUpdateTrigger }
                     <h3 className="text-lg font-semibold text-gray-800">{category}</h3>
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                       {criteriaList.map((criterion) => {
-                        const fieldName = createFieldName(criterion.name);
-                        const currentValue = formData[fieldName] || 0;
+                        const currentValue = formData[criterion.id] || 0;
                         
                         return (
                           <div key={criterion.id}>
-                            <Label htmlFor={fieldName}>
+                            <Label htmlFor={criterion.id}>
                               {criterion.name} ({criterion.scale})
                             </Label>
                             <Input
-                              id={fieldName}
+                              id={criterion.id}
                               type="number"
                               min={criterion.type === 'Benefit' && criterion.scale.includes('1-5') ? "1" : "0"}
                               max={criterion.scale.includes('1-5') ? "5" : criterion.scale.includes('0-1') || criterion.scale.includes('0/1') ? "1" : "10"}
                               value={currentValue}
-                              onChange={(e) => handleInputChange(fieldName, parseInt(e.target.value) || 0)}
+                              onChange={(e) => handleInputChange(criterion.id, parseInt(e.target.value) || 0)}
                             />
                             <p className="text-xs text-gray-500 mt-1">
-                              Bobot: {criterion.weight}% | Tipe: {criterion.type} | Field: {fieldName}
+                              Bobot: {criterion.weight}% | Tipe: {criterion.type} | ID: {criterion.id.slice(0, 8)}...
                             </p>
                           </div>
                         );
