@@ -46,7 +46,7 @@ export interface SAWResult {
   note?: string;
 }
 
-const Index = () => {
+const index = () => {
   const [employees, setEmployees] = useState<Employee[]>([]);
   const [results, setResults] = useState<SAWResult[]>([]);
   const [totalCriteria, setTotalCriteria] = useState(0);
