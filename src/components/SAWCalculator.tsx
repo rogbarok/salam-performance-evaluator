@@ -44,56 +44,42 @@ export const SAWCalculator = ({ employees, onCalculate, criteriaUpdateTrigger }:
   const [lastCalculationDate, setLastCalculationDate] = useState<string>('');
   const { toast } = useToast();
 
-  // Mapping dari nama kriteria di database ke field evaluasi
-  const criteriaMapping: { [key: string]: string } = {
-    'Kualitas Kerja': 'kualitasKerja',
-    'Tanggung Jawab': 'tanggungJawab',
-    'Kuantitas Kerja': 'kuantitasKerja',
-    'Pemahaman Tugas': 'pemahamanTugas',
-    'Inisiatif': 'inisiatif',
-    'Kerjasama': 'kerjasama',
-    'Jumlah Hari Alpa': 'hariAlpa',
-    'Jumlah Keterlambatan': 'keterlambatan',
-    'Jumlah Hari Izin': 'hariIzin',
-    'Jumlah Hari Sakit': 'hariSakit',
-    'Pulang Cepat': 'pulangCepat',
-    'Prestasi': 'prestasi',
-    'Surat Peringatan': 'suratPeringatan'
+  // Fungsi untuk mengkonversi nama kriteria menjadi field name yang konsisten
+  const createFieldName = (criteriaName: string): string => {
+    return criteriaName
+      .toLowerCase()
+      .replace(/[^a-z0-9\s]/g, '') // Hapus karakter khusus
+      .replace(/\s+/g, '_') // Ganti spasi dengan underscore
+      .replace(/^_+|_+$/g, '') // Hapus underscore di awal/akhir
+      .replace(/_+/g, '_'); // Ganti multiple underscore dengan single
   };
 
-  // Mapping untuk kode kriteria C1-C13 dengan urutan yang benar
-  const criteriaCodeMapping: { [key: string]: string } = {
-    'kualitasKerja': 'C1',
-    'tanggungJawab': 'C2',
-    'kuantitasKerja': 'C3',
-    'pemahamanTugas': 'C4',
-    'inisiatif': 'C5',
-    'kerjasama': 'C6',
-    'hariAlpa': 'C7',
-    'keterlambatan': 'C8',
-    'hariIzin': 'C9',
-    'hariSakit': 'C10',
-    'pulangCepat': 'C11',
-    'prestasi': 'C12',
-    'suratPeringatan': 'C13'
+  // Mapping dinamis dari nama kriteria ke field Employee interface
+  const createEmployeeFieldMapping = (criteriaName: string): string => {
+    const fieldName = createFieldName(criteriaName);
+    
+    // Mapping khusus untuk kriteria yang sudah ada di Employee interface
+    const specialMappings: { [key: string]: string } = {
+      'kualitas_kerja': 'kualitasKerja',
+      'tanggung_jawab': 'tanggungJawab',
+      'kuantitas_kerja': 'kuantitasKerja',
+      'pemahaman_tugas': 'pemahamanTugas',
+      'inisiatif': 'inisiatif',
+      'kerjasama': 'kerjasama',
+      'jumlah_hari_alpa': 'hariAlpa',
+      'jumlah_keterlambatan': 'keterlambatan',
+      'jumlah_hari_izin': 'hariIzin',
+      'jumlah_hari_sakit': 'hariSakit',
+      'pulang_cepat': 'pulangCepat',
+      'prestasi': 'prestasi',
+      'surat_peringatan': 'suratPeringatan'
+    };
+
+    return specialMappings[fieldName] || fieldName;
   };
 
-  // Urutan kriteria berdasarkan kode C1-C13
-  const orderedCriteria = [
-    'kualitasKerja',
-    'tanggungJawab', 
-    'kuantitasKerja',
-    'pemahamanTugas',
-    'inisiatif',
-    'kerjasama',
-    'hariAlpa',
-    'keterlambatan',
-    'hariIzin',
-    'hariSakit',
-    'pulangCepat',
-    'prestasi',
-    'suratPeringatan'
-  ];
+  // Mapping untuk kode kriteria C1-C13+ dengan urutan yang benar
+  const criteriaCodeMapping: { [key: string]: string } = {};
 
   // Check if there are saved SAW results in database
   const checkSavedResults = async () => {
@@ -235,7 +221,7 @@ export const SAWCalculator = ({ employees, onCalculate, criteriaUpdateTrigger }:
       console.log('Saving SAW results to database...');
       
       const calculationDate = new Date().toISOString();
-      const activeCriteria = orderedCriteria.filter(criterion => criteriaWeights[criterion] !== undefined);
+      const activeCriteria = criteriaData.filter(criterion => criteriaWeights[createFieldName(criterion.name)] !== undefined);
 
       // 1. Save calculation session
       const { error: calcSessionError } = await supabase
@@ -277,15 +263,16 @@ export const SAWCalculator = ({ employees, onCalculate, criteriaUpdateTrigger }:
       results.forEach((result, empIndex) => {
         result.normalizedScores.forEach((normalizedValue, criteriaIndex) => {
           const criterion = activeCriteria[criteriaIndex];
-          const criteriaCode = criteriaCodeMapping[criterion];
-          const rawValue = employees.find(emp => emp.id === result.employee.id)?.[criterion as keyof Employee] as number;
+          const criteriaCode = `C${criteriaIndex + 1}`;
+          const employeeFieldName = createEmployeeFieldMapping(criterion.name);
+          const rawValue = (result.employee as any)[employeeFieldName] || 0;
           
           matrixDataToInsert.push({
             employee_id: result.employee.id,
             criteria_code: criteriaCode,
             raw_value: rawValue,
             normalized_value: normalizedValue,
-            weight: criteriaWeights[criterion],
+            weight: criteriaWeights[createFieldName(criterion.name)],
             calculation_date: calculationDate
           });
         });
@@ -382,7 +369,7 @@ export const SAWCalculator = ({ employees, onCalculate, criteriaUpdateTrigger }:
       const types: { [key: string]: string } = {};
       const processedCriteria: Criteria[] = [];
 
-      data.forEach((item) => {
+      data.forEach((item, index) => {
         const criteria: Criteria = {
           id: item.id,
           name: item.name,
@@ -392,14 +379,14 @@ export const SAWCalculator = ({ employees, onCalculate, criteriaUpdateTrigger }:
           scale: item.scale
         };
 
-        const fieldName = criteriaMapping[criteria.name];
-        if (fieldName) {
-          weights[fieldName] = criteria.weight / 100;
-          types[fieldName] = criteria.type;
-          console.log(`Mapped ${criteria.name} -> ${fieldName}`);
-        } else {
-          console.warn(`No mapping found for criteria: ${criteria.name}`);
-        }
+        const fieldName = createFieldName(criteria.name);
+        weights[fieldName] = criteria.weight / 100;
+        types[fieldName] = criteria.type;
+        
+        // Generate criteria code mapping
+        criteriaCodeMapping[fieldName] = `C${index + 1}`;
+        
+        console.log(`Mapped ${criteria.name} -> ${fieldName} (${criteriaCodeMapping[fieldName]})`);
 
         processedCriteria.push(criteria);
       });
@@ -466,9 +453,9 @@ export const SAWCalculator = ({ employees, onCalculate, criteriaUpdateTrigger }:
     console.log("Using criteria weights (decimals):", criteriaWeights);
 
     try {
-      const activeCriteria = orderedCriteria.filter(criterion => criteriaWeights[criterion] !== undefined);
+      const activeCriteria = criteriaData.filter(criterion => criteriaWeights[createFieldName(criterion.name)] !== undefined);
       
-      console.log("Active criteria for calculation:", activeCriteria);
+      console.log("Active criteria for calculation:", activeCriteria.map(c => c.name));
       console.log("Available criteria weights:", Object.keys(criteriaWeights));
 
       if (activeCriteria.length === 0) {
@@ -483,7 +470,9 @@ export const SAWCalculator = ({ employees, onCalculate, criteriaUpdateTrigger }:
       // Step 1: Create decision matrix - use RAW DATA
       const matrix = employees.map(emp => 
         activeCriteria.map(criterion => {
-          const rawValue = emp[criterion as keyof Employee] as number;
+          const employeeFieldName = createEmployeeFieldMapping(criterion.name);
+          const rawValue = (emp as any)[employeeFieldName] || 0;
+          console.log(`Employee ${emp.name}, criterion ${criterion.name}: field=${employeeFieldName}, value=${rawValue}`);
           return rawValue;
         })
       );
@@ -497,34 +486,45 @@ export const SAWCalculator = ({ employees, onCalculate, criteriaUpdateTrigger }:
       for (let j = 0; j < activeCriteria.length; j++) {
         const criterion = activeCriteria[j];
         const columnValues = matrix.map(row => row[j]);
-        const criterionType = criteriaTypes[criterion] || 'Benefit';
+        const criterionType = criterion.type;
         
-        console.log(`Normalizing criterion ${criterion} (${criterionType}):`, columnValues);
+        console.log(`Normalizing criterion ${criterion.name} (${criterionType}):`, columnValues);
         
         if (criterionType === 'Benefit') {
-          if (['kualitasKerja', 'tanggungJawab', 'kuantitasKerja', 'pemahamanTugas', 'inisiatif', 'kerjasama'].includes(criterion)) {
+          if (criterion.scale.includes('1-5')) {
+            // Untuk skala 1-5, normalisasi dengan membagi dengan 5
             for (let i = 0; i < matrix.length; i++) {
               const rawValue = matrix[i][j];
               normalized[i][j] = rawValue / 5;
             }
-            console.log(`${criterion} normalization (new rule): [${normalized.map(row => row[j].toFixed(3)).join(', ')}]`);
-          } else if (criterion === 'prestasi') {
+            console.log(`${criterion.name} normalization (1-5 scale): [${normalized.map(row => row[j].toFixed(3)).join(', ')}]`);
+          } else if (criterion.scale.includes('0-1') || criterion.scale.includes('0/1')) {
+            // Untuk skala binary 0/1
             for (let i = 0; i < matrix.length; i++) {
               normalized[i][j] = matrix[i][j] === 1 ? 1.000 : 0.000;
             }
-            console.log(`Prestasi normalization: [${normalized.map(row => row[j]).join(', ')}]`);
-          }
-        } else {
-          if (['hariAlpa', 'keterlambatan', 'hariIzin', 'hariSakit', 'pulangCepat'].includes(criterion)) {
+            console.log(`${criterion.name} normalization (binary): [${normalized.map(row => row[j]).join(', ')}]`);
+          } else {
+            // Fallback untuk benefit criteria lainnya
+            const maxValue = Math.max(...columnValues);
             for (let i = 0; i < matrix.length; i++) {
-              normalized[i][j] = matrix[i][j] > 0 ? 0.000 : 1.000;
+              normalized[i][j] = maxValue > 0 ? matrix[i][j] / maxValue : 0;
             }
-            console.log(`${criterion} normalization: [${normalized.map(row => row[j]).join(', ')}]`);
-          } else if (criterion === 'suratPeringatan') {
+            console.log(`${criterion.name} normalization (max): [${normalized.map(row => row[j].toFixed(3)).join(', ')}]`);
+          }
+        } else { // Cost criteria
+          if (criterion.scale.includes('0-1') || criterion.scale.includes('0/1')) {
+            // Untuk binary cost criteria (seperti surat peringatan)
             for (let i = 0; i < matrix.length; i++) {
               normalized[i][j] = matrix[i][j] === 0 ? 1.000 : 0.000;
             }
-            console.log(`Surat Peringatan normalization: [${normalized.map(row => row[j]).join(', ')}]`);
+            console.log(`${criterion.name} normalization (binary cost): [${normalized.map(row => row[j]).join(', ')}]`);
+          } else {
+            // Untuk cost criteria lainnya (seperti hari alpa, keterlambatan, dll)
+            for (let i = 0; i < matrix.length; i++) {
+              normalized[i][j] = matrix[i][j] > 0 ? 0.000 : 1.000;
+            }
+            console.log(`${criterion.name} normalization (cost): [${normalized.map(row => row[j]).join(', ')}]`);
           }
         }
       }
@@ -538,10 +538,11 @@ export const SAWCalculator = ({ employees, onCalculate, criteriaUpdateTrigger }:
         
         const finalScore = normalizedScores.reduce((sum, normalizedScore, j) => {
           const criterion = activeCriteria[j];
-          const weight = criteriaWeights[criterion];
+          const criterionFieldName = createFieldName(criterion.name);
+          const weight = criteriaWeights[criterionFieldName];
           const weightedScore = normalizedScore * weight;
           
-          console.log(`Employee ${employee.name}, criterion ${criterion}: normalized=${normalizedScore.toFixed(3)}, weight=${weight}, weighted=${weightedScore.toFixed(3)}`);
+          console.log(`Employee ${employee.name}, criterion ${criterion.name}: normalized=${normalizedScore.toFixed(3)}, weight=${weight}, weighted=${weightedScore.toFixed(3)}`);
           
           return sum + weightedScore;
         }, 0);
@@ -755,12 +756,13 @@ export const SAWCalculator = ({ employees, onCalculate, criteriaUpdateTrigger }:
               <div className="mt-4">
                 <h4 className="font-semibold mb-2">Kriteria yang Dimuat dari Database:</h4>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-2 text-sm">
-                  {criteriaData.map((criteria) => {
-                    const fieldName = criteriaMapping[criteria.name];
-                    const isMapped = fieldName && criteriaWeights[fieldName] !== undefined;
+                  {criteriaData.map((criteria, index) => {
+                    const fieldName = createFieldName(criteria.name);
+                    const isMapped = criteriaWeights[fieldName] !== undefined;
+                    const criteriaCode = `C${index + 1}`;
                     return (
                       <div key={criteria.id} className={`flex justify-between p-2 rounded ${isMapped ? 'bg-green-50' : 'bg-red-50'}`}>
-                        <span>{criteria.name}</span>
+                        <span><strong>{criteriaCode}:</strong> {criteria.name}</span>
                         <span className="text-gray-600">
                           {criteria.type} - Bobot: {criteria.weight}%
                           {isMapped ? ' ✓' : ' ✗'}
@@ -772,44 +774,21 @@ export const SAWCalculator = ({ employees, onCalculate, criteriaUpdateTrigger }:
               </div>
             )}
 
-            {/* Detailed Criteria Mapping */}
-            <div className="mt-4 p-3 bg-green-50 rounded-lg text-sm">
-              <h5 className="font-semibold mb-2">Pemetaan Kriteria C1-C13:</h5>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-2 text-xs">
-                <div className="space-y-1">
-                  <p><strong>C1:</strong> Kualitas Kerja (Benefit)</p>
-                  <p><strong>C2:</strong> Tanggung Jawab (Benefit)</p>
-                  <p><strong>C3:</strong> Kuantitas Kerja (Benefit)</p>
-                  <p><strong>C4:</strong> Pemahaman Tugas (Benefit)</p>
-                  <p><strong>C5:</strong> Inisiatif (Benefit)</p>
-                  <p><strong>C6:</strong> Kerjasama (Benefit)</p>
-                  <p><strong>C7:</strong> Hari Alpa (Cost) - <span className="text-red-600">Jika > 0 → 0.000</span></p>
-                </div>
-                <div className="space-y-1">
-                  <p><strong>C8:</strong> Keterlambatan (Cost) - <span className="text-red-600">Jika > 0 → 0.000</span></p>
-                  <p><strong>C9:</strong> Hari Izin (Cost) - <span className="text-red-600">Jika > 0 → 0.000</span></p>
-                  <p><strong>C10:</strong> Hari Sakit (Cost) - <span className="text-red-600">Jika > 0 → 0.000</span></p>
-                  <p><strong>C11:</strong> Pulang Cepat (Cost) - <span className="text-red-600">Jika > 0 → 0.000</span></p>
-                  <p><strong>C12:</strong> Prestasi (Benefit) - <span className="text-green-600">1 → 1.000, 0 → 0.000</span></p>
-                  <p><strong>C13:</strong> Surat Peringatan (Cost) - <span className="text-red-600">0 → 1.000, 1 → 0.000</span></p>
-                </div>
-              </div>
-            </div>
-
             {/* Updated Normalization Rules */}
             <div className="mt-4 p-3 bg-blue-50 rounded-lg text-sm">
-              <h5 className="font-semibold mb-2">Aturan Normalisasi SAW (DIPERBAIKI):</h5>
+              <h5 className="font-semibold mb-2">Aturan Normalisasi SAW (FLEKSIBEL):</h5>
               <div className="grid grid-cols-1 gap-2 text-xs">
                 <div>
-                  <strong>Benefit Criteria (C1-C6, C12):</strong>
-                  <p>• Performance (C1-C6): <span className="text-blue-600 font-semibold">nilai_asli / 5</span></p>
+                  <strong>Benefit Criteria:</strong>
+                  <p>• Skala 1-5: <span className="text-blue-600 font-semibold">nilai_asli / 5</span></p>
                   <p className="ml-4 text-blue-600">- Nilai 1 → 0.200, Nilai 2 → 0.400, Nilai 3 → 0.600, Nilai 4 → 0.800, Nilai 5 → 1.000</p>
-                  <p>• Prestasi (C12): Rij = 1.000 jika nilai = 1, Rij = 0.000 jika nilai = 0</p>
+                  <p>• Binary 0/1: Rij = 1.000 jika nilai = 1, Rij = 0.000 jika nilai = 0</p>
+                  <p>• Lainnya: Rij = nilai_asli / nilai_maksimum</p>
                 </div>
                 <div className="mt-2">
-                  <strong>Cost Criteria (C7-C13):</strong>
-                  <p>• Cost Criteria (C7-C11): Rij = 0.000 jika nilai > 0, Rij = 1.000 jika nilai = 0</p>
-                  <p>• Surat Peringatan (C13): Rij = 1.000 jika nilai = 0, Rij = 0.000 jika nilai = 1</p>
+                  <strong>Cost Criteria:</strong>
+                  <p>• Binary 0/1: Rij = 1.000 jika nilai = 0, Rij = 0.000 jika nilai = 1</p>
+                  <p>• Lainnya: Rij = 0.000 jika nilai > 0, Rij = 1.000 jika nilai = 0</p>
                 </div>
               </div>
             </div>
@@ -839,8 +818,8 @@ export const SAWCalculator = ({ employees, onCalculate, criteriaUpdateTrigger }:
                 <TableHeader>
                   <TableRow>
                     <TableHead className="w-[100px]">Nama</TableHead>
-                    {orderedCriteria.filter(fieldName => criteriaWeights[fieldName] !== undefined).map((fieldName) => (
-                      <TableHead key={fieldName}>{criteriaCodeMapping[fieldName]}</TableHead>
+                    {criteriaData.filter(criterion => criteriaWeights[createFieldName(criterion.name)] !== undefined).map((criterion, index) => (
+                      <TableHead key={criterion.id}>C{index + 1}</TableHead>
                     ))}
                   </TableRow>
                 </TableHeader>
@@ -875,8 +854,8 @@ export const SAWCalculator = ({ employees, onCalculate, criteriaUpdateTrigger }:
                 <TableHeader>
                   <TableRow>
                     <TableHead className="w-[100px]">Nama</TableHead>
-                    {orderedCriteria.filter(fieldName => criteriaWeights[fieldName] !== undefined).map((fieldName) => (
-                      <TableHead key={fieldName}>{criteriaCodeMapping[fieldName]}</TableHead>
+                    {criteriaData.filter(criterion => criteriaWeights[createFieldName(criterion.name)] !== undefined).map((criterion, index) => (
+                      <TableHead key={criterion.id}>C{index + 1}</TableHead>
                     ))}
                   </TableRow>
                 </TableHeader>

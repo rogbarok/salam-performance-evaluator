@@ -16,40 +16,67 @@ interface EditEmployeeDialogProps {
 }
 
 export const EditEmployeeDialog = ({ employee, isOpen, onClose, onUpdate }: EditEmployeeDialogProps) => {
-  const [formData, setFormData] = useState({
-    kualitasKerja: 1,
-    tanggungJawab: 1,
-    kuantitasKerja: 1,
-    pemahamanTugas: 1,
-    inisiatif: 1,
-    kerjasama: 1,
-    hariAlpa: 0,
-    keterlambatan: 0,
-    hariIzin: 0,
-    hariSakit: 0,
-    pulangCepat: 0,
-    prestasi: 0,
-    suratPeringatan: 0
-  });
+  const [formData, setFormData] = useState<{ [key: string]: number }>({});
   const [criteria, setCriteria] = useState<Criteria[]>([]);
   const [loading, setLoading] = useState(false);
   const { toast } = useToast();
 
-  // Mapping dari nama kriteria di database ke field evaluasi
-  const criteriaMapping: { [key: string]: string } = {
-    'Kualitas Kerja': 'kualitasKerja',
-    'Tanggung Jawab': 'tanggungJawab',
-    'Kuantitas Kerja': 'kuantitasKerja',
-    'Pemahaman Tugas': 'pemahamanTugas',
-    'Inisiatif': 'inisiatif',
-    'Kerjasama': 'kerjasama',
-    'Jumlah Hari Alpa': 'hariAlpa',
-    'Jumlah Keterlambatan': 'keterlambatan',
-    'Jumlah Hari Izin': 'hariIzin',
-    'Jumlah Hari Sakit': 'hariSakit',
-    'Pulang Cepat': 'pulangCepat',
-    'Prestasi': 'prestasi',
-    'Surat Peringatan': 'suratPeringatan'
+  // Fungsi untuk mengkonversi nama kriteria menjadi field name yang konsisten
+  const createFieldName = (criteriaName: string): string => {
+    return criteriaName
+      .toLowerCase()
+      .replace(/[^a-z0-9\s]/g, '') // Hapus karakter khusus
+      .replace(/\s+/g, '_') // Ganti spasi dengan underscore
+      .replace(/^_+|_+$/g, '') // Hapus underscore di awal/akhir
+      .replace(/_+/g, '_'); // Ganti multiple underscore dengan single
+  };
+
+  // Mapping dinamis dari nama kriteria ke field database
+  const createDatabaseFieldMapping = (criteriaName: string): string => {
+    const fieldName = createFieldName(criteriaName);
+    
+    // Mapping khusus untuk kriteria yang sudah ada di database
+    const specialMappings: { [key: string]: string } = {
+      'kualitas_kerja': 'kualitas_kerja',
+      'tanggung_jawab': 'tanggung_jawab',
+      'kuantitas_kerja': 'kuantitas_kerja',
+      'pemahaman_tugas': 'pemahaman_tugas',
+      'inisiatif': 'inisiatif',
+      'kerjasama': 'kerjasama',
+      'jumlah_hari_alpa': 'hari_alpa',
+      'jumlah_keterlambatan': 'keterlambatan',
+      'jumlah_hari_izin': 'hari_izin',
+      'jumlah_hari_sakit': 'hari_sakit',
+      'pulang_cepat': 'pulang_cepat',
+      'prestasi': 'prestasi',
+      'surat_peringatan': 'surat_peringatan'
+    };
+
+    return specialMappings[fieldName] || fieldName;
+  };
+
+  // Mapping dinamis dari nama kriteria ke field Employee interface
+  const createEmployeeFieldMapping = (criteriaName: string): string => {
+    const fieldName = createFieldName(criteriaName);
+    
+    // Mapping khusus untuk kriteria yang sudah ada di Employee interface
+    const specialMappings: { [key: string]: string } = {
+      'kualitas_kerja': 'kualitasKerja',
+      'tanggung_jawab': 'tanggungJawab',
+      'kuantitas_kerja': 'kuantitasKerja',
+      'pemahaman_tugas': 'pemahamanTugas',
+      'inisiatif': 'inisiatif',
+      'kerjasama': 'kerjasama',
+      'jumlah_hari_alpa': 'hariAlpa',
+      'jumlah_keterlambatan': 'keterlambatan',
+      'jumlah_hari_izin': 'hariIzin',
+      'jumlah_hari_sakit': 'hariSakit',
+      'pulang_cepat': 'pulangCepat',
+      'prestasi': 'prestasi',
+      'surat_peringatan': 'suratPeringatan'
+    };
+
+    return specialMappings[fieldName] || fieldName;
   };
 
   // Fetch criteria from database
@@ -78,26 +105,23 @@ export const EditEmployeeDialog = ({ employee, isOpen, onClose, onUpdate }: Edit
   }, [isOpen]);
 
   useEffect(() => {
-    if (employee) {
-      setFormData({
-        kualitasKerja: employee.kualitasKerja,
-        tanggungJawab: employee.tanggungJawab,
-        kuantitasKerja: employee.kuantitasKerja,
-        pemahamanTugas: employee.pemahamanTugas,
-        inisiatif: employee.inisiatif,
-        kerjasama: employee.kerjasama,
-        hariAlpa: employee.hariAlpa,
-        keterlambatan: employee.keterlambatan,
-        hariIzin: employee.hariIzin,
-        hariSakit: employee.hariSakit,
-        pulangCepat: employee.pulangCepat,
-        prestasi: employee.prestasi,
-        suratPeringatan: employee.suratPeringatan
+    if (employee && criteria.length > 0) {
+      // Initialize form data dengan nilai dari employee
+      const newFormData: { [key: string]: number } = {};
+      
+      criteria.forEach(criterion => {
+        const formFieldName = createFieldName(criterion.name);
+        const employeeFieldName = createEmployeeFieldMapping(criterion.name);
+        const value = (employee as any)[employeeFieldName] || 0;
+        newFormData[formFieldName] = value;
       });
+      
+      setFormData(newFormData);
+      console.log('EditEmployeeDialog: Form data initialized:', newFormData);
     }
-  }, [employee]);
+  }, [employee, criteria]);
 
-  const handleInputChange = (field: keyof typeof formData, value: number) => {
+  const handleInputChange = (field: string, value: number) => {
     setFormData(prev => ({
       ...prev,
       [field]: value
@@ -110,31 +134,47 @@ export const EditEmployeeDialog = ({ employee, isOpen, onClose, onUpdate }: Edit
 
     setLoading(true);
     try {
+      // Prepare update data dengan mapping dinamis ke field database
+      const updateData: any = {
+        updated_at: new Date().toISOString()
+      };
+
+      // Map semua form data ke field database yang sesuai
+      criteria.forEach(criterion => {
+        const formFieldName = createFieldName(criterion.name);
+        const dbFieldName = createDatabaseFieldMapping(criterion.name);
+        const value = formData[formFieldName] || 0;
+        
+        updateData[dbFieldName] = value;
+        console.log(`Update mapping: ${criterion.name} -> ${formFieldName} -> ${dbFieldName} = ${value}`);
+      });
+
+      console.log('Updating evaluation data:', updateData);
+
       const { error } = await supabase
         .from('employee_evaluations')
-        .update({
-          kualitas_kerja: formData.kualitasKerja,
-          tanggung_jawab: formData.tanggungJawab,
-          kuantitas_kerja: formData.kuantitasKerja,
-          pemahaman_tugas: formData.pemahamanTugas,
-          inisiatif: formData.inisiatif,
-          kerjasama: formData.kerjasama,
-          hari_alpa: formData.hariAlpa,
-          keterlambatan: formData.keterlambatan,
-          hari_izin: formData.hariIzin,
-          hari_sakit: formData.hariSakit,
-          pulang_cepat: formData.pulangCepat,
-          prestasi: formData.prestasi,
-          surat_peringatan: formData.suratPeringatan,
-          updated_at: new Date().toISOString()
-        })
+        .update(updateData)
         .eq('employee_id', employee.id);
 
       if (error) throw error;
 
+      // Convert back to Employee format
       const updatedEmployee: Employee = {
         ...employee,
-        ...formData
+        // Map data kembali ke format Employee interface
+        kualitasKerja: updateData.kualitas_kerja || employee.kualitasKerja,
+        tanggungJawab: updateData.tanggung_jawab || employee.tanggungJawab,
+        kuantitasKerja: updateData.kuantitas_kerja || employee.kuantitasKerja,
+        pemahamanTugas: updateData.pemahaman_tugas || employee.pemahamanTugas,
+        inisiatif: updateData.inisiatif || employee.inisiatif,
+        kerjasama: updateData.kerjasama || employee.kerjasama,
+        hariAlpa: updateData.hari_alpa || employee.hariAlpa,
+        keterlambatan: updateData.keterlambatan || employee.keterlambatan,
+        hariIzin: updateData.hari_izin || employee.hariIzin,
+        hariSakit: updateData.hari_sakit || employee.hariSakit,
+        pulangCepat: updateData.pulang_cepat || employee.pulangCepat,
+        prestasi: updateData.prestasi || employee.prestasi,
+        suratPeringatan: updateData.surat_peringatan || employee.suratPeringatan
       };
 
       onUpdate(updatedEmployee);
@@ -181,13 +221,8 @@ export const EditEmployeeDialog = ({ employee, isOpen, onClose, onUpdate }: Edit
               <h3 className="text-lg font-semibold text-gray-800">{category}</h3>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 {criteriaList.map((criterion) => {
-                  const fieldName = criteriaMapping[criterion.name];
-                  if (!fieldName) {
-                    console.warn(`No mapping found for criterion: ${criterion.name}`);
-                    return null;
-                  }
-                  
-                  const currentValue = formData[fieldName as keyof typeof formData] || 0;
+                  const fieldName = createFieldName(criterion.name);
+                  const currentValue = formData[fieldName] || 0;
                   
                   return (
                     <div key={criterion.id}>
@@ -197,13 +232,13 @@ export const EditEmployeeDialog = ({ employee, isOpen, onClose, onUpdate }: Edit
                       <Input
                         id={fieldName}
                         type="number"
-                        min={criterion.category === 'A. Kinerja Inti' ? "1" : "0"}
+                        min={criterion.type === 'Benefit' && criterion.scale.includes('1-5') ? "1" : "0"}
                         max={criterion.scale.includes('1-5') ? "5" : criterion.scale.includes('0-1') || criterion.scale.includes('0/1') ? "1" : "10"}
                         value={currentValue}
-                        onChange={(e) => handleInputChange(fieldName as keyof typeof formData, parseInt(e.target.value) || 0)}
+                        onChange={(e) => handleInputChange(fieldName, parseInt(e.target.value) || 0)}
                       />
                       <p className="text-xs text-gray-500 mt-1">
-                        Bobot: {criterion.weight}% | Tipe: {criterion.type}
+                        Bobot: {criterion.weight}% | Tipe: {criterion.type} | Field: {fieldName}
                       </p>
                     </div>
                   );
@@ -214,156 +249,9 @@ export const EditEmployeeDialog = ({ employee, isOpen, onClose, onUpdate }: Edit
 
           {/* Fallback for when criteria are not loaded yet */}
           {criteria.length === 0 && (
-            <div className="space-y-4">
-              <h3 className="text-lg font-semibold text-gray-800">A. Kinerja Inti (Skala 1-5)</h3>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div>
-                  <Label htmlFor="kualitasKerja">Kualitas Kerja</Label>
-                  <Input
-                    id="kualitasKerja"
-                    type="number"
-                    min="1"
-                    max="5"
-                    value={formData.kualitasKerja}
-                    onChange={(e) => handleInputChange("kualitasKerja", parseInt(e.target.value))}
-                  />
-                </div>
-                <div>
-                  <Label htmlFor="tanggungJawab">Tanggung Jawab</Label>
-                  <Input
-                    id="tanggungJawab"
-                    type="number"
-                    min="1"
-                    max="5"
-                    value={formData.tanggungJawab}
-                    onChange={(e) => handleInputChange("tanggungJawab", parseInt(e.target.value))}
-                  />
-                </div>
-                <div>
-                  <Label htmlFor="kuantitasKerja">Kuantitas Kerja</Label>
-                  <Input
-                    id="kuantitasKerja"
-                    type="number"
-                    min="1"
-                    max="5"
-                    value={formData.kuantitasKerja}
-                    onChange={(e) => handleInputChange("kuantitasKerja", parseInt(e.target.value))}
-                  />
-                </div>
-                <div>
-                  <Label htmlFor="pemahamanTugas">Pemahaman Tugas</Label>
-                  <Input
-                    id="pemahamanTugas"
-                    type="number"
-                    min="1"
-                    max="5"
-                    value={formData.pemahamanTugas}
-                    onChange={(e) => handleInputChange("pemahamanTugas", parseInt(e.target.value))}
-                  />
-                </div>
-                <div>
-                  <Label htmlFor="inisiatif">Inisiatif</Label>
-                  <Input
-                    id="inisiatif"
-                    type="number"
-                    min="1"
-                    max="5"
-                    value={formData.inisiatif}
-                    onChange={(e) => handleInputChange("inisiatif", parseInt(e.target.value))}
-                  />
-                </div>
-                <div>
-                  <Label htmlFor="kerjasama">Kerjasama</Label>
-                  <Input
-                    id="kerjasama"
-                    type="number"
-                    min="1"
-                    max="5"
-                    value={formData.kerjasama}
-                    onChange={(e) => handleInputChange("kerjasama", parseInt(e.target.value))}
-                  />
-                </div>
-              </div>
-
-              <h3 className="text-lg font-semibold text-gray-800">B. Kedisiplinan</h3>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div>
-                  <Label htmlFor="hariAlpa">Jumlah Hari Alpa</Label>
-                  <Input
-                    id="hariAlpa"
-                    type="number"
-                    min="0"
-                    value={formData.hariAlpa}
-                    onChange={(e) => handleInputChange("hariAlpa", parseInt(e.target.value))}
-                  />
-                </div>
-                <div>
-                  <Label htmlFor="keterlambatan">Jumlah Keterlambatan</Label>
-                  <Input
-                    id="keterlambatan"
-                    type="number"
-                    min="0"
-                    value={formData.keterlambatan}
-                    onChange={(e) => handleInputChange("keterlambatan", parseInt(e.target.value))}
-                  />
-                </div>
-                <div>
-                  <Label htmlFor="hariIzin">Jumlah Hari Izin</Label>
-                  <Input
-                    id="hariIzin"
-                    type="number"
-                    min="0"
-                    value={formData.hariIzin}
-                    onChange={(e) => handleInputChange("hariIzin", parseInt(e.target.value))}
-                  />
-                </div>
-                <div>
-                  <Label htmlFor="hariSakit">Jumlah Hari Sakit</Label>
-                  <Input
-                    id="hariSakit"
-                    type="number"
-                    min="0"
-                    value={formData.hariSakit}
-                    onChange={(e) => handleInputChange("hariSakit", parseInt(e.target.value))}
-                  />
-                </div>
-                <div>
-                  <Label htmlFor="pulangCepat">Pulang Cepat</Label>
-                  <Input
-                    id="pulangCepat"
-                    type="number"
-                    min="0"
-                    value={formData.pulangCepat}
-                    onChange={(e) => handleInputChange("pulangCepat", parseInt(e.target.value))}
-                  />
-                </div>
-              </div>
-
-              <h3 className="text-lg font-semibold text-gray-800">C. Faktor Tambahan</h3>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div>
-                  <Label htmlFor="prestasi">Prestasi (0=Tidak, 1=Ada)</Label>
-                  <Input
-                    id="prestasi"
-                    type="number"
-                    min="0"
-                    max="1"
-                    value={formData.prestasi}
-                    onChange={(e) => handleInputChange("prestasi", parseInt(e.target.value))}
-                  />
-                </div>
-                <div>
-                  <Label htmlFor="suratPeringatan">Surat Peringatan (0=Tidak, 1=Ada)</Label>
-                  <Input
-                    id="suratPeringatan"
-                    type="number"
-                    min="0"
-                    max="1"
-                    value={formData.suratPeringatan}
-                    onChange={(e) => handleInputChange("suratPeringatan", parseInt(e.target.value))}
-                  />
-                </div>
-              </div>
+            <div className="text-center py-8">
+              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-green-600 mx-auto mb-2"></div>
+              <p className="text-gray-600">Memuat kriteria...</p>
             </div>
           )}
 
