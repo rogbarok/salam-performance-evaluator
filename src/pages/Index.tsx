@@ -424,8 +424,3 @@ const Index = () => {
         </Tabs>
       </div>
     </div>
-  )
-  );
-};
-
-export default Index;
