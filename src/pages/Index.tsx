@@ -424,6 +424,7 @@ const Index = () => {
         </Tabs>
       </div>
     </div>
+  )
   );
 };
 
