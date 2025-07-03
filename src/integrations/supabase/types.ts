@@ -143,6 +143,115 @@ export type Database = {
         }
         Relationships: []
       }
+      saw_calculations: {
+        Row: {
+          calculation_date: string
+          created_at: string
+          id: string
+          total_criteria: number
+          total_employees: number
+        }
+        Insert: {
+          calculation_date?: string
+          created_at?: string
+          id?: string
+          total_criteria: number
+          total_employees: number
+        }
+        Update: {
+          calculation_date?: string
+          created_at?: string
+          id?: string
+          total_criteria?: number
+          total_employees?: number
+        }
+        Relationships: []
+      }
+      saw_normalized_matrix: {
+        Row: {
+          calculation_date: string
+          created_at: string
+          criteria_code: string
+          employee_id: string
+          id: string
+          normalized_value: number
+          raw_value: number
+          weight: number
+        }
+        Insert: {
+          calculation_date?: string
+          created_at?: string
+          criteria_code: string
+          employee_id: string
+          id?: string
+          normalized_value: number
+          raw_value: number
+          weight: number
+        }
+        Update: {
+          calculation_date?: string
+          created_at?: string
+          criteria_code?: string
+          employee_id?: string
+          id?: string
+          normalized_value?: number
+          raw_value?: number
+          weight?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "saw_normalized_matrix_employee_id_fkey"
+            columns: ["employee_id"]
+            isOneToOne: false
+            referencedRelation: "employees"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      saw_results: {
+        Row: {
+          calculation_date: string
+          converted_score: number
+          created_at: string
+          employee_id: string
+          final_score: number
+          id: string
+          note: string | null
+          rank: number
+          recommendation: string
+        }
+        Insert: {
+          calculation_date?: string
+          converted_score: number
+          created_at?: string
+          employee_id: string
+          final_score: number
+          id?: string
+          note?: string | null
+          rank: number
+          recommendation: string
+        }
+        Update: {
+          calculation_date?: string
+          converted_score?: number
+          created_at?: string
+          employee_id?: string
+          final_score?: number
+          id?: string
+          note?: string | null
+          rank?: number
+          recommendation?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "saw_results_employee_id_fkey"
+            columns: ["employee_id"]
+            isOneToOne: false
+            referencedRelation: "employees"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
     }
     Views: {
       [_ in never]: never

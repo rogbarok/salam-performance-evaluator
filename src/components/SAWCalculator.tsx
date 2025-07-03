@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Calculator, Play, RefreshCw, AlertTriangle } from "lucide-react";
+import { Calculator, Play, RefreshCw, AlertTriangle, Database, Trash2 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
@@ -39,6 +39,8 @@ export const SAWCalculator = ({ employees, onCalculate }: SAWCalculatorProps) =>
   const [finalScores, setFinalScores] = useState<SAWResult[]>([]);
   const [isCalculated, setIsCalculated] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [hasSavedResults, setHasSavedResults] = useState(false);
+  const [lastCalculationDate, setLastCalculationDate] = useState<string>('');
   const { toast } = useToast();
 
   // Mapping dari nama kriteria di database ke field evaluasi
@@ -92,6 +94,262 @@ export const SAWCalculator = ({ employees, onCalculate }: SAWCalculatorProps) =>
     'suratPeringatan'
   ];
 
+  // Check if there are saved SAW results in database
+  const checkSavedResults = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('saw_results')
+        .select('calculation_date')
+        .order('calculation_date', { ascending: false })
+        .limit(1);
+
+      if (error) {
+        console.error('Error checking saved results:', error);
+        return;
+      }
+
+      if (data && data.length > 0) {
+        setHasSavedResults(true);
+        setLastCalculationDate(new Date(data[0].calculation_date).toLocaleString('id-ID'));
+        console.log('Found saved SAW results from:', data[0].calculation_date);
+      } else {
+        setHasSavedResults(false);
+        console.log('No saved SAW results found');
+      }
+    } catch (error) {
+      console.error('Error checking saved results:', error);
+    }
+  };
+
+  // Load saved SAW results from database
+  const loadSavedResults = async () => {
+    if (employees.length === 0) {
+      toast({
+        title: "Error",
+        description: "Tidak ada data karyawan untuk dimuat",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setLoading(true);
+    try {
+      console.log('Loading saved SAW results from database...');
+
+      // Get the latest calculation date
+      const { data: latestCalc, error: calcError } = await supabase
+        .from('saw_results')
+        .select('calculation_date')
+        .order('calculation_date', { ascending: false })
+        .limit(1);
+
+      if (calcError || !latestCalc || latestCalc.length === 0) {
+        toast({
+          title: "Error",
+          description: "Tidak ada hasil perhitungan tersimpan",
+          variant: "destructive",
+        });
+        return;
+      }
+
+      const calculationDate = latestCalc[0].calculation_date;
+
+      // Load SAW results
+      const { data: savedResults, error: resultsError } = await supabase
+        .from('saw_results')
+        .select(`
+          *,
+          employees!inner(id, name, position, department)
+        `)
+        .eq('calculation_date', calculationDate)
+        .order('rank');
+
+      // Load normalized matrix data
+      const { data: normalizedData, error: normalizedError } = await supabase
+        .from('saw_normalized_matrix')
+        .select('*')
+        .eq('calculation_date', calculationDate)
+        .order('employee_id');
+
+      if (resultsError || normalizedError) {
+        console.error('Error loading saved data:', resultsError || normalizedError);
+        toast({
+          title: "Error",
+          description: "Gagal memuat data hasil perhitungan",
+          variant: "destructive",
+        });
+        return;
+      }
+
+      // Convert database results to SAWResult format
+      const convertedResults: SAWResult[] = (savedResults || []).map(result => {
+        // Find employee from current employees list
+        const employee = employees.find(emp => emp.id === result.employee_id);
+        if (!employee) {
+          console.warn(`Employee not found for ID: ${result.employee_id}`);
+          return null;
+        }
+
+        // Get normalized scores for this employee
+        const employeeNormalizedData = (normalizedData || [])
+          .filter(norm => norm.employee_id === result.employee_id)
+          .sort((a, b) => a.criteria_code.localeCompare(b.criteria_code));
+
+        return {
+          employee,
+          normalizedScores: employeeNormalizedData.map(norm => norm.normalized_value),
+          finalScore: result.final_score,
+          convertedScore: result.converted_score,
+          rank: result.rank,
+          recommendation: result.recommendation,
+          note: result.note || undefined
+        };
+      }).filter(Boolean) as SAWResult[];
+
+      console.log('Loaded saved results:', convertedResults.length);
+      
+      setFinalScores(convertedResults);
+      setIsCalculated(true);
+      onCalculate(convertedResults);
+
+      toast({
+        title: "Berhasil",
+        description: `Berhasil memuat ${convertedResults.length} hasil perhitungan tersimpan`,
+      });
+    } catch (error) {
+      console.error('Error loading saved results:', error);
+      toast({
+        title: "Error",
+        description: "Terjadi kesalahan saat memuat data",
+        variant: "destructive",
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Save SAW results to database
+  const saveResultsToDatabase = async (results: SAWResult[], normalizedMatrix: number[][]) => {
+    try {
+      console.log('Saving SAW results to database...');
+      
+      const calculationDate = new Date().toISOString();
+      const activeCriteria = orderedCriteria.filter(criterion => criteriaWeights[criterion] !== undefined);
+
+      // 1. Save calculation session
+      const { error: calcSessionError } = await supabase
+        .from('saw_calculations')
+        .insert({
+          total_employees: results.length,
+          total_criteria: activeCriteria.length,
+          calculation_date: calculationDate
+        });
+
+      if (calcSessionError) {
+        console.error('Error saving calculation session:', calcSessionError);
+        throw calcSessionError;
+      }
+
+      // 2. Save SAW results
+      const resultsToInsert = results.map(result => ({
+        employee_id: result.employee.id,
+        final_score: result.finalScore,
+        converted_score: result.convertedScore,
+        rank: result.rank,
+        recommendation: result.recommendation,
+        note: result.note || null,
+        calculation_date: calculationDate
+      }));
+
+      const { error: resultsError } = await supabase
+        .from('saw_results')
+        .insert(resultsToInsert);
+
+      if (resultsError) {
+        console.error('Error saving SAW results:', resultsError);
+        throw resultsError;
+      }
+
+      // 3. Save normalized matrix data
+      const matrixDataToInsert: any[] = [];
+      
+      results.forEach((result, empIndex) => {
+        result.normalizedScores.forEach((normalizedValue, criteriaIndex) => {
+          const criterion = activeCriteria[criteriaIndex];
+          const criteriaCode = criteriaCodeMapping[criterion];
+          const rawValue = employees.find(emp => emp.id === result.employee.id)?.[criterion as keyof Employee] as number;
+          
+          matrixDataToInsert.push({
+            employee_id: result.employee.id,
+            criteria_code: criteriaCode,
+            raw_value: rawValue,
+            normalized_value: normalizedValue,
+            weight: criteriaWeights[criterion],
+            calculation_date: calculationDate
+          });
+        });
+      });
+
+      const { error: matrixError } = await supabase
+        .from('saw_normalized_matrix')
+        .insert(matrixDataToInsert);
+
+      if (matrixError) {
+        console.error('Error saving normalized matrix:', matrixError);
+        throw matrixError;
+      }
+
+      console.log('Successfully saved SAW results to database');
+      setHasSavedResults(true);
+      setLastCalculationDate(new Date(calculationDate).toLocaleString('id-ID'));
+
+      toast({
+        title: "Berhasil",
+        description: "Hasil perhitungan SAW berhasil disimpan ke database",
+      });
+    } catch (error) {
+      console.error('Error saving to database:', error);
+      toast({
+        title: "Error",
+        description: "Gagal menyimpan hasil ke database",
+        variant: "destructive",
+      });
+    }
+  };
+
+  // Clear saved results from database
+  const clearSavedResults = async () => {
+    setLoading(true);
+    try {
+      console.log('Clearing saved SAW results...');
+
+      // Delete in order: normalized matrix, results, calculations
+      await supabase.from('saw_normalized_matrix').delete().neq('id', '');
+      await supabase.from('saw_results').delete().neq('id', '');
+      await supabase.from('saw_calculations').delete().neq('id', '');
+
+      setHasSavedResults(false);
+      setLastCalculationDate('');
+      setFinalScores([]);
+      setIsCalculated(false);
+      onCalculate([]);
+
+      toast({
+        title: "Berhasil",
+        description: "Semua hasil perhitungan tersimpan telah dihapus",
+      });
+    } catch (error) {
+      console.error('Error clearing saved results:', error);
+      toast({
+        title: "Error",
+        description: "Gagal menghapus hasil tersimpan",
+        variant: "destructive",
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const fetchCriteriaWeights = async () => {
     setLoading(true);
     try {
@@ -124,7 +382,6 @@ export const SAWCalculator = ({ employees, onCalculate }: SAWCalculatorProps) =>
       const processedCriteria: Criteria[] = [];
 
       data.forEach((item) => {
-        // Type cast to ensure compatibility
         const criteria: Criteria = {
           id: item.id,
           name: item.name,
@@ -134,10 +391,9 @@ export const SAWCalculator = ({ employees, onCalculate }: SAWCalculatorProps) =>
           scale: item.scale
         };
 
-        // Gunakan mapping untuk mencocokkan nama kriteria dengan field evaluasi
         const fieldName = criteriaMapping[criteria.name];
         if (fieldName) {
-          weights[fieldName] = criteria.weight / 100; // Convert percentage to decimal
+          weights[fieldName] = criteria.weight / 100;
           types[fieldName] = criteria.type;
           console.log(`Mapped ${criteria.name} -> ${fieldName}`);
         } else {
@@ -174,6 +430,7 @@ export const SAWCalculator = ({ employees, onCalculate }: SAWCalculatorProps) =>
 
   useEffect(() => {
     fetchCriteriaWeights();
+    checkSavedResults();
   }, []);
 
   // Function to convert form score (1-5) to a scale (e.g., 20-100)
@@ -210,7 +467,6 @@ export const SAWCalculator = ({ employees, onCalculate }: SAWCalculatorProps) =>
     console.log("Using criteria weights (decimals):", criteriaWeights);
 
     try {
-      // Gunakan urutan kriteria yang sudah ditentukan (C1-C13)
       const activeCriteria = orderedCriteria.filter(criterion => criteriaWeights[criterion] !== undefined);
       
       console.log("Active criteria for calculation:", activeCriteria);
@@ -236,7 +492,7 @@ export const SAWCalculator = ({ employees, onCalculate }: SAWCalculatorProps) =>
       console.log("Decision Matrix (Raw Data):", matrix);
       setDecisionMatrix(matrix);
 
-      // Step 2: Apply SAW normalization dengan perbaikan untuk C1-C6
+      // Step 2: Apply SAW normalization
       const normalized = matrix.map(() => new Array(activeCriteria.length).fill(0));
 
       for (let j = 0; j < activeCriteria.length; j++) {
@@ -248,30 +504,24 @@ export const SAWCalculator = ({ employees, onCalculate }: SAWCalculatorProps) =>
         
         if (criterionType === 'Benefit') {
           if (['kualitasKerja', 'tanggungJawab', 'kuantitasKerja', 'pemahamanTugas', 'inisiatif', 'kerjasama'].includes(criterion)) {
-            // PERBAIKAN: Untuk C1-C6, gunakan aturan normalisasi khusus
-            // nilai 1 -> 0.200, nilai 2 -> 0.400, nilai 3 -> 0.600, nilai 4 -> 0.800, nilai 5 -> 1.000
             for (let i = 0; i < matrix.length; i++) {
               const rawValue = matrix[i][j];
-              normalized[i][j] = rawValue / 5; // Formula: nilai_asli / 5
+              normalized[i][j] = rawValue / 5;
             }
             console.log(`${criterion} normalization (new rule): [${normalized.map(row => row[j].toFixed(3)).join(', ')}]`);
           } else if (criterion === 'prestasi') {
-            // C12 - Prestasi: if = 1 → 1.000, if = 0 → 0.000
             for (let i = 0; i < matrix.length; i++) {
               normalized[i][j] = matrix[i][j] === 1 ? 1.000 : 0.000;
             }
             console.log(`Prestasi normalization: [${normalized.map(row => row[j]).join(', ')}]`);
           }
         } else {
-          // For Cost criteria - C7-C13
           if (['hariAlpa', 'keterlambatan', 'hariIzin', 'hariSakit', 'pulangCepat'].includes(criterion)) {
-            // C7-C11: if > 0 → 0.000, if = 0 → 1.000
             for (let i = 0; i < matrix.length; i++) {
               normalized[i][j] = matrix[i][j] > 0 ? 0.000 : 1.000;
             }
             console.log(`${criterion} normalization: [${normalized.map(row => row[j]).join(', ')}]`);
           } else if (criterion === 'suratPeringatan') {
-            // C13 - Surat Peringatan: if = 0 → 1.000, if = 1 → 0.000
             for (let i = 0; i < matrix.length; i++) {
               normalized[i][j] = matrix[i][j] === 0 ? 1.000 : 0.000;
             }
@@ -287,7 +537,6 @@ export const SAWCalculator = ({ employees, onCalculate }: SAWCalculatorProps) =>
       const results: SAWResult[] = employees.map((employee, index) => {
         const normalizedScores = normalized[index];
         
-        // Calculate final SAW score: sum of (weight * normalized_score)
         const finalScore = normalizedScores.reduce((sum, normalizedScore, j) => {
           const criterion = activeCriteria[j];
           const weight = criteriaWeights[criterion];
@@ -300,14 +549,11 @@ export const SAWCalculator = ({ employees, onCalculate }: SAWCalculatorProps) =>
 
         console.log(`Final SAW score for ${employee.name}:`, finalScore.toFixed(4));
 
-        // Convert SAW score to 1-5 scale for display
         const convertedScore = Math.max(1, Math.min(5, finalScore * 5));
         console.log(`Converted score for ${employee.name}: ${finalScore.toFixed(4)} -> ${convertedScore.toFixed(2)}`);
         
-        // Check for automatic termination
         const isAutoTerminated = employee.hariAlpa > 10;
         
-        // Generate recommendation berdasarkan converted score
         const { recommendation, note } = getRecommendation(convertedScore, isAutoTerminated, employee.hariAlpa);
 
         return {
@@ -321,7 +567,7 @@ export const SAWCalculator = ({ employees, onCalculate }: SAWCalculatorProps) =>
         };
       });
 
-      // Step 4: Rank employees (excluding auto-terminated ones)
+      // Step 4: Rank employees
       const nonTerminatedResults = results.filter(r => r.employee.hariAlpa <= 10);
       const terminatedResults = results.filter(r => r.employee.hariAlpa > 10);
       
@@ -331,7 +577,7 @@ export const SAWCalculator = ({ employees, onCalculate }: SAWCalculatorProps) =>
       });
       
       terminatedResults.forEach(result => {
-        result.rank = 999; // Special rank for terminated employees
+        result.rank = 999;
       });
 
       const finalResults = [...nonTerminatedResults, ...terminatedResults];
@@ -341,9 +587,12 @@ export const SAWCalculator = ({ employees, onCalculate }: SAWCalculatorProps) =>
       setIsCalculated(true);
       onCalculate(finalResults);
 
+      // Save results to database
+      await saveResultsToDatabase(finalResults, normalized);
+
       toast({
         title: "Berhasil",
-        description: `Perhitungan SAW selesai menggunakan ${activeCriteria.length} kriteria`,
+        description: `Perhitungan SAW selesai menggunakan ${activeCriteria.length} kriteria dan disimpan ke database`,
       });
     } catch (error) {
       console.error('Error in SAW calculation:', error);
@@ -365,7 +614,6 @@ export const SAWCalculator = ({ employees, onCalculate }: SAWCalculatorProps) =>
       };
     }
 
-    // Logika rekomendasi berdasarkan converted score
     if (convertedScore >= 4) {
       return { 
         recommendation: "Dapat diperpanjang",
@@ -422,8 +670,14 @@ export const SAWCalculator = ({ employees, onCalculate }: SAWCalculatorProps) =>
                     <Badge variant="secondary" className="ml-1">Belum dihitung</Badge>
                   )}
                 </p>
+                {hasSavedResults && (
+                  <p className="text-sm text-gray-600">
+                    <Database className="inline w-4 h-4 mr-1" />
+                    Data tersimpan: <span className="font-semibold">{lastCalculationDate}</span>
+                  </p>
+                )}
               </div>
-              <div className="flex gap-2">
+              <div className="flex gap-2 flex-wrap">
                 <Button 
                   onClick={fetchCriteriaWeights}
                   variant="outline"
@@ -433,14 +687,41 @@ export const SAWCalculator = ({ employees, onCalculate }: SAWCalculatorProps) =>
                   <RefreshCw className="w-4 h-4 mr-2" />
                   Muat Ulang Kriteria
                 </Button>
+                
+                {hasSavedResults && (
+                  <Button 
+                    onClick={loadSavedResults}
+                    variant="outline"
+                    disabled={loading || employees.length === 0}
+                    size="sm"
+                    className="text-blue-600 border-blue-600 hover:bg-blue-50"
+                  >
+                    <Database className="w-4 h-4 mr-2" />
+                    Muat Hasil Tersimpan
+                  </Button>
+                )}
+                
                 <Button 
                   onClick={calculateSAW}
                   disabled={employees.length === 0 || loading || Object.keys(criteriaWeights).length === 0}
                   className="bg-green-600 hover:bg-green-700"
+                  size="sm"
                 >
                   <Play className="w-4 h-4 mr-2" />
                   {loading ? "Menghitung..." : "Hitung SAW"}
                 </Button>
+
+                {hasSavedResults && (
+                  <Button 
+                    onClick={clearSavedResults}
+                    variant="destructive"
+                    disabled={loading}
+                    size="sm"
+                  >
+                    <Trash2 className="w-4 h-4 mr-2" />
+                    Hapus Data Tersimpan
+                  </Button>
+                )}
               </div>
             </div>
 
@@ -460,6 +741,13 @@ export const SAWCalculator = ({ employees, onCalculate }: SAWCalculatorProps) =>
             {loading && (
               <div className="text-center py-4 text-blue-600 bg-blue-50 rounded-lg">
                 <p>Sedang memuat data kriteria dari database...</p>
+              </div>
+            )}
+
+            {hasSavedResults && !isCalculated && (
+              <div className="text-center py-4 text-green-600 bg-green-50 rounded-lg">
+                <Database className="w-5 h-5 inline mr-2" />
+                <span>Ada hasil perhitungan tersimpan dari {lastCalculationDate}. Klik "Muat Hasil Tersimpan" untuk memuatnya.</span>
               </div>
             )}
 

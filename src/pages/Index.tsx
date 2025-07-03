@@ -1,4 +1,3 @@
-
 import { useState, useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -53,6 +52,88 @@ const Index = () => {
   const [loading, setLoading] = useState(true);
   const { toast } = useToast();
 
+  // Load saved SAW results automatically
+  const loadSavedSAWResults = async () => {
+    try {
+      console.log('Checking for saved SAW results...');
+      
+      // Get the latest calculation date
+      const { data: latestCalc, error: calcError } = await supabase
+        .from('saw_results')
+        .select('calculation_date')
+        .order('calculation_date', { ascending: false })
+        .limit(1);
+
+      if (calcError || !latestCalc || latestCalc.length === 0) {
+        console.log('No saved SAW results found');
+        return;
+      }
+
+      const calculationDate = latestCalc[0].calculation_date;
+      console.log('Found saved SAW results from:', calculationDate);
+
+      // Load SAW results with employee data
+      const { data: savedResults, error: resultsError } = await supabase
+        .from('saw_results')
+        .select(`
+          *,
+          employees!inner(id, name, position, department)
+        `)
+        .eq('calculation_date', calculationDate)
+        .order('rank');
+
+      if (resultsError) {
+        console.error('Error loading saved SAW results:', resultsError);
+        return;
+      }
+
+      if (savedResults && savedResults.length > 0) {
+        // Convert database results to SAWResult format
+        const convertedResults: SAWResult[] = savedResults.map(result => {
+          // Create employee object from joined data
+          const employee: Employee = {
+            id: result.employees.id,
+            name: result.employees.name,
+            // These values will be loaded separately from employee_evaluations
+            kualitasKerja: 0,
+            tanggungJawab: 0,
+            kuantitasKerja: 0,
+            pemahamanTugas: 0,
+            inisiatif: 0,
+            kerjasama: 0,
+            hariAlpa: 0,
+            keterlambatan: 0,
+            hariIzin: 0,
+            hariSakit: 0,
+            pulangCepat: 0,
+            prestasi: 0,
+            suratPeringatan: 0
+          };
+
+          return {
+            employee,
+            normalizedScores: [], // Will be loaded by SAWCalculator if needed
+            finalScore: result.final_score,
+            convertedScore: result.converted_score,
+            rank: result.rank,
+            recommendation: result.recommendation,
+            note: result.note || undefined
+          };
+        });
+
+        console.log('Auto-loaded saved SAW results:', convertedResults.length);
+        setResults(convertedResults);
+        
+        toast({
+          title: "Info",
+          description: `Otomatis memuat ${convertedResults.length} hasil perhitungan SAW tersimpan`,
+        });
+      }
+    } catch (error) {
+      console.error('Error auto-loading saved SAW results:', error);
+    }
+  };
+
   // Load data from database
   const loadDataFromDatabase = async () => {
     setLoading(true);
@@ -84,7 +165,7 @@ const Index = () => {
           hariSakit: evaluation.hari_sakit,
           pulangCepat: evaluation.pulang_cepat,
           prestasi: evaluation.prestasi,
-          suratPeringatan: evaluation.surat_peringatan
+          suratPeringatan: evaluation.surat_peringatan  
         }));
 
         setEmployees(convertedEmployees);
@@ -112,6 +193,9 @@ const Index = () => {
       } else {
         setTotalEmployeesInDB(employeesCount || 0);
       }
+
+      // Auto-load saved SAW results after loading employee data
+      await loadSavedSAWResults();
 
     } catch (error) {
       console.error('Network error loading data:', error);
