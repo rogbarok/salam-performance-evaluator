@@ -1,4 +1,3 @@
-
 import { useState, useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -7,12 +6,16 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
-import { Plus, Edit, Trash2, Settings } from "lucide-react";
+import { Plus, Edit, Trash2, Settings, AlertTriangle } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import type { Criteria } from "@/types/database";
 
-export const CriteriaManagement = () => {
+interface CriteriaManagementProps {
+  onCriteriaChange?: () => void;
+}
+
+export const CriteriaManagement = ({ onCriteriaChange }: CriteriaManagementProps) => {
   const [criteria, setCriteria] = useState<Criteria[]>([]);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [editingCriteria, setEditingCriteria] = useState<Criteria | null>(null);
@@ -26,6 +29,70 @@ export const CriteriaManagement = () => {
     category: "",
     scale: ""
   });
+
+  // Calculate total weights by category and type
+  const calculateTotalWeights = (criteriaList: Criteria[]) => {
+    const totals: { [key: string]: number } = {};
+    
+    criteriaList.forEach(criterion => {
+      const key = `${criterion.category}-${criterion.type}`;
+      totals[key] = (totals[key] || 0) + criterion.weight;
+    });
+    
+    return totals;
+  };
+
+  // Auto-adjust weights when adding/editing criteria
+  const autoAdjustWeights = async (newCriterion: Criteria, isEdit: boolean = false) => {
+    try {
+      const categoryType = `${newCriterion.category}-${newCriterion.type}`;
+      
+      // Get all criteria in the same category and type, excluding the current one if editing
+      const sameCategoryCriteria = criteria.filter(c => 
+        c.category === newCriterion.category && 
+        c.type === newCriterion.type && 
+        (!isEdit || c.id !== newCriterion.id)
+      );
+
+      if (sameCategoryCriteria.length === 0) {
+        // If this is the first criterion in this category-type, no adjustment needed
+        return;
+      }
+
+      const currentTotalWeight = sameCategoryCriteria.reduce((sum, c) => sum + c.weight, 0);
+      const newTotalWeight = currentTotalWeight + newCriterion.weight;
+
+      if (newTotalWeight > 100) {
+        // Need to adjust existing criteria proportionally
+        const adjustmentFactor = (100 - newCriterion.weight) / currentTotalWeight;
+        
+        const adjustments = sameCategoryCriteria.map(criterion => ({
+          id: criterion.id,
+          newWeight: Math.round(criterion.weight * adjustmentFactor * 100) / 100
+        }));
+
+        // Update the adjusted weights in database
+        for (const adjustment of adjustments) {
+          await supabase
+            .from('criteria')
+            .update({ weight: adjustment.newWeight })
+            .eq('id', adjustment.id);
+        }
+
+        toast({
+          title: "Bobot Disesuaikan",
+          description: `Bobot kriteria lain dalam kategori ${newCriterion.category} (${newCriterion.type}) telah disesuaikan secara proporsional`,
+        });
+      }
+    } catch (error) {
+      console.error('Error auto-adjusting weights:', error);
+      toast({
+        title: "Peringatan",
+        description: "Gagal menyesuaikan bobot otomatis",
+        variant: "destructive",
+      });
+    }
+  };
 
   const fetchCriteria = async () => {
     setLoading(true);
@@ -43,7 +110,6 @@ export const CriteriaManagement = () => {
           variant: "destructive",
         });
       } else {
-        // Type cast the data to match our Criteria interface
         const typedCriteria = (data || []).map(item => ({
           ...item,
           type: item.type as 'Benefit' | 'Cost'
@@ -70,11 +136,10 @@ export const CriteriaManagement = () => {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
-    // Validate weight is between 0 and 1
-    if (formData.weight < 0 || formData.weight > 1) {
+    if (formData.weight < 0 || formData.weight > 100) {
       toast({
         title: "Error",
-        description: "Bobot harus antara 0 dan 1",
+        description: "Bobot harus antara 0 dan 100",
         variant: "destructive",
       });
       return;
@@ -83,38 +148,42 @@ export const CriteriaManagement = () => {
     setLoading(true);
 
     try {
+      const criterionData = {
+        name: formData.name,
+        type: formData.type,
+        weight: formData.weight,
+        category: formData.category,
+        scale: formData.scale
+      };
+
       if (editingCriteria) {
-        // Update existing criteria
         const { error } = await supabase
           .from('criteria')
-          .update({
-            name: formData.name,
-            type: formData.type,
-            weight: formData.weight,
-            category: formData.category,
-            scale: formData.scale
-          })
+          .update(criterionData)
           .eq('id', editingCriteria.id);
 
         if (error) throw error;
+
+        // Auto-adjust weights for edited criteria
+        await autoAdjustWeights({ ...criterionData, id: editingCriteria.id } as Criteria, true);
 
         toast({
           title: "Berhasil",
           description: "Kriteria berhasil diperbarui",
         });
       } else {
-        // Create new criteria
-        const { error } = await supabase
+        const { data: newCriterion, error } = await supabase
           .from('criteria')
-          .insert([{
-            name: formData.name,
-            type: formData.type,
-            weight: formData.weight,
-            category: formData.category,
-            scale: formData.scale
-          }]);
+          .insert([criterionData])
+          .select()
+          .single();
 
         if (error) throw error;
+
+        // Auto-adjust weights for new criteria
+        if (newCriterion) {
+          await autoAdjustWeights(newCriterion as Criteria);
+        }
 
         toast({
           title: "Berhasil",
@@ -124,7 +193,12 @@ export const CriteriaManagement = () => {
 
       resetForm();
       setIsDialogOpen(false);
-      fetchCriteria();
+      await fetchCriteria();
+      
+      // Notify parent components about criteria change
+      if (onCriteriaChange) {
+        onCriteriaChange();
+      }
     } catch (error) {
       console.error('Error saving criteria:', error);
       toast({
@@ -166,7 +240,12 @@ export const CriteriaManagement = () => {
         description: "Kriteria berhasil dihapus",
       });
       
-      fetchCriteria();
+      await fetchCriteria();
+      
+      // Notify parent components about criteria change
+      if (onCriteriaChange) {
+        onCriteriaChange();
+      }
     } catch (error) {
       console.error('Error deleting criteria:', error);
       toast({
@@ -202,6 +281,9 @@ export const CriteriaManagement = () => {
     setIsDialogOpen(true);
   };
 
+  // Calculate weight totals for display
+  const weightTotals = calculateTotalWeights(criteria);
+
   return (
     <div className="space-y-6">
       <Card>
@@ -236,12 +318,16 @@ export const CriteriaManagement = () => {
                   </div>
                   <div>
                     <Label htmlFor="category">Kategori</Label>
-                    <Input
-                      id="category"
-                      value={formData.category}
-                      onChange={(e) => setFormData(prev => ({ ...prev, category: e.target.value }))}
-                      required
-                    />
+                    <Select value={formData.category} onValueChange={(value) => setFormData(prev => ({ ...prev, category: value }))}>
+                      <SelectTrigger>
+                        <SelectValue placeholder="Pilih kategori" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="Kinerja Inti">Kinerja Inti</SelectItem>
+                        <SelectItem value="Kedisiplinan">Kedisiplinan</SelectItem>
+                        <SelectItem value="Prestasi">Prestasi</SelectItem>
+                      </SelectContent>
+                    </Select>
                   </div>
                   <div>
                     <Label htmlFor="type">Jenis Kriteria</Label>
@@ -256,17 +342,25 @@ export const CriteriaManagement = () => {
                     </Select>
                   </div>
                   <div>
-                    <Label htmlFor="weight">Bobot (0-1)</Label>
+                    <Label htmlFor="weight">Bobot (%)</Label>
                     <Input
                       id="weight"
                       type="number"
                       step="0.01"
                       min="0"
-                      max="1"
+                      max="100"
                       value={formData.weight}
-                      onChange={(e) => setFormData(prev => ({ ...prev, weight: parseFloat(e.target.value) }))}
+                      onChange={(e) => setFormData(prev => ({ ...prev, weight: parseFloat(e.target.value) || 0 }))}
                       required
                     />
+                    {formData.category && formData.type && (
+                      <p className="text-sm text-gray-600 mt-1">
+                        Total bobot {formData.category} ({formData.type}): {
+                          (weightTotals[`${formData.category}-${formData.type}`] || 0) + 
+                          (editingCriteria ? formData.weight - editingCriteria.weight : formData.weight)
+                        }%
+                      </p>
+                    )}
                   </div>
                   <div>
                     <Label htmlFor="scale">Skala Penilaian</Label>
@@ -292,6 +386,29 @@ export const CriteriaManagement = () => {
           </div>
         </CardHeader>
         <CardContent>
+          {/* Weight Summary */}
+          <div className="mb-6 p-4 bg-blue-50 rounded-lg">
+            <h4 className="font-semibold mb-3 text-blue-800">Ringkasan Bobot per Kategori</h4>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {Object.entries(weightTotals).map(([key, total]) => {
+                const [category, type] = key.split('-');
+                const isOver = total > 100;
+                return (
+                  <div key={key} className={`flex justify-between items-center p-2 rounded ${isOver ? 'bg-red-100 text-red-800' : 'bg-green-100 text-green-800'}`}>
+                    <span className="font-medium">{category} ({type})</span>
+                    <span className="flex items-center gap-1">
+                      {total.toFixed(2)}%
+                      {isOver && <AlertTriangle className="w-4 h-4" />}
+                    </span>
+                  </div>
+                );
+              })}
+            </div>
+            <p className="text-sm text-blue-700 mt-2">
+              <strong>Catatan:</strong> Sistem akan otomatis menyesuaikan bobot kriteria lain dalam kategori yang sama jika total melebihi 100%
+            </p>
+          </div>
+
           {loading ? (
             <div className="text-center py-8">
               <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-green-600 mx-auto mb-2"></div>
@@ -306,7 +423,7 @@ export const CriteriaManagement = () => {
                   <TableHead>Nama Kriteria</TableHead>
                   <TableHead>Kategori</TableHead>
                   <TableHead>Jenis</TableHead>
-                  <TableHead>Bobot</TableHead>
+                  <TableHead>Bobot (%)</TableHead>
                   <TableHead>Skala</TableHead>
                   <TableHead>Aksi</TableHead>
                 </TableRow>
@@ -323,7 +440,7 @@ export const CriteriaManagement = () => {
                         {criteriaItem.type}
                       </span>
                     </TableCell>
-                    <TableCell>{criteriaItem.weight}</TableCell>
+                    <TableCell>{criteriaItem.weight}%</TableCell>
                     <TableCell>{criteriaItem.scale}</TableCell>
                     <TableCell>
                       <div className="flex gap-2">

@@ -28,9 +28,10 @@ interface Criteria {
 interface SAWCalculatorProps {
   employees: Employee[];
   onCalculate: (results: SAWResult[]) => void;
+  criteriaUpdateTrigger?: number;
 }
 
-export const SAWCalculator = ({ employees, onCalculate }: SAWCalculatorProps) => {
+export const SAWCalculator = ({ employees, onCalculate, criteriaUpdateTrigger }: SAWCalculatorProps) => {
   const [criteriaWeights, setCriteriaWeights] = useState<{ [key: string]: number }>({});
   const [criteriaTypes, setCriteriaTypes] = useState<{ [key: string]: string }>({});
   const [criteriaData, setCriteriaData] = useState<Criteria[]>([]);
@@ -432,6 +433,14 @@ export const SAWCalculator = ({ employees, onCalculate }: SAWCalculatorProps) =>
     fetchCriteriaWeights();
     checkSavedResults();
   }, []);
+
+  // Auto-refresh when criteria change
+  useEffect(() => {
+    if (criteriaUpdateTrigger !== undefined && criteriaUpdateTrigger > 0) {
+      console.log('Criteria update trigger detected, refreshing...');
+      fetchCriteriaWeights();
+    }
+  }, [criteriaUpdateTrigger]);
 
   // Function to convert form score (1-5) to a scale (e.g., 20-100)
   const convertFormScoreToScale = (score: number): number => {

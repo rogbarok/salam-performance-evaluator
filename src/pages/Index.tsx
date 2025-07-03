@@ -50,6 +50,7 @@ const Index = () => {
   const [totalCriteria, setTotalCriteria] = useState(0);
   const [totalEmployeesInDB, setTotalEmployeesInDB] = useState(0);
   const [loading, setLoading] = useState(true);
+  const [criteriaUpdateTrigger, setCriteriaUpdateTrigger] = useState(0);
   const { toast } = useToast();
 
   // Load saved SAW results automatically
@@ -209,6 +210,13 @@ const Index = () => {
     }
   };
 
+  const handleCriteriaChange = () => {
+    console.log('Criteria changed, triggering reload...');
+    setCriteriaUpdateTrigger(prev => prev + 1);
+    // Reload data to get updated criteria
+    loadDataFromDatabase();
+  };
+
   useEffect(() => {
     loadDataFromDatabase();
   }, []);
@@ -316,11 +324,11 @@ const Index = () => {
           </TabsList>
 
           <TabsContent value="criteria">
-            <CriteriaTable />
+            <CriteriaTable key={criteriaUpdateTrigger} />
           </TabsContent>
 
           <TabsContent value="criteria-crud">
-            <CriteriaManagement />
+            <CriteriaManagement onCriteriaChange={handleCriteriaChange} />
           </TabsContent>
 
           <TabsContent value="employees">
@@ -332,7 +340,11 @@ const Index = () => {
           </TabsContent>
 
           <TabsContent value="calculate">
-            <SAWCalculator employees={employees} onCalculate={calculateResults} />
+            <SAWCalculator 
+              employees={employees} 
+              onCalculate={calculateResults}
+              criteriaUpdateTrigger={criteriaUpdateTrigger}
+            />
           </TabsContent>
 
           <TabsContent value="results">
