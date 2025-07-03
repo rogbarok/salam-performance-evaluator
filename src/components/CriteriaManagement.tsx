@@ -15,6 +15,13 @@ interface CriteriaManagementProps {
   onCriteriaChange?: () => void;
 }
 
+// Fixed category totals
+const CATEGORY_TOTALS = {
+  "A. Kinerja Inti": 60,
+  "B. Kedisiplinan": 25,
+  "C. Prestasi": 15
+};
+
 export const CriteriaManagement = ({ onCriteriaChange }: CriteriaManagementProps) => {
   const [criteria, setCriteria] = useState<Criteria[]>([]);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
@@ -30,60 +37,71 @@ export const CriteriaManagement = ({ onCriteriaChange }: CriteriaManagementProps
     scale: ""
   });
 
-  // Calculate total weights by category and type
-  const calculateTotalWeights = (criteriaList: Criteria[]) => {
+  // Calculate total weights by category
+  const calculateCategoryTotals = (criteriaList: Criteria[]) => {
     const totals: { [key: string]: number } = {};
     
     criteriaList.forEach(criterion => {
-      const key = `${criterion.category}-${criterion.type}`;
-      totals[key] = (totals[key] || 0) + criterion.weight;
+      totals[criterion.category] = (totals[criterion.category] || 0) + criterion.weight;
     });
     
     return totals;
   };
 
-  // Auto-adjust weights when adding/editing criteria
+  // Auto-adjust weights to maintain fixed category totals
   const autoAdjustWeights = async (newCriterion: Criteria, isEdit: boolean = false) => {
     try {
-      const categoryType = `${newCriterion.category}-${newCriterion.type}`;
-      
-      // Get all criteria in the same category and type, excluding the current one if editing
+      const categoryTotal = CATEGORY_TOTALS[newCriterion.category as keyof typeof CATEGORY_TOTALS];
+      if (!categoryTotal) {
+        console.warn('No fixed total defined for category:', newCriterion.category);
+        return;
+      }
+
+      // Get all criteria in the same category, excluding the current one if editing
       const sameCategoryCriteria = criteria.filter(c => 
         c.category === newCriterion.category && 
-        c.type === newCriterion.type && 
         (!isEdit || c.id !== newCriterion.id)
       );
 
       if (sameCategoryCriteria.length === 0) {
-        // If this is the first criterion in this category-type, no adjustment needed
+        // If this is the first criterion in this category, no adjustment needed
         return;
       }
 
       const currentTotalWeight = sameCategoryCriteria.reduce((sum, c) => sum + c.weight, 0);
-      const newTotalWeight = currentTotalWeight + newCriterion.weight;
+      const remainingWeight = categoryTotal - newCriterion.weight;
 
-      if (newTotalWeight > 100) {
-        // Need to adjust existing criteria proportionally
-        const adjustmentFactor = (100 - newCriterion.weight) / currentTotalWeight;
-        
-        const adjustments = sameCategoryCriteria.map(criterion => ({
-          id: criterion.id,
-          newWeight: Math.round(criterion.weight * adjustmentFactor * 100) / 100
-        }));
-
-        // Update the adjusted weights in database
-        for (const adjustment of adjustments) {
-          await supabase
-            .from('criteria')
-            .update({ weight: adjustment.newWeight })
-            .eq('id', adjustment.id);
-        }
-
+      if (remainingWeight <= 0) {
         toast({
-          title: "Bobot Disesuaikan",
-          description: `Bobot kriteria lain dalam kategori ${newCriterion.category} (${newCriterion.type}) telah disesuaikan secara proporsional`,
+          title: "Error",
+          description: `Bobot terlalu besar. Total bobot untuk kategori ${newCriterion.category} harus ${categoryTotal}%`,
+          variant: "destructive",
         });
+        return false;
       }
+
+      // Adjust existing criteria proportionally to fit the remaining weight
+      const adjustmentFactor = remainingWeight / currentTotalWeight;
+      
+      const adjustments = sameCategoryCriteria.map(criterion => ({
+        id: criterion.id,
+        newWeight: Math.round(criterion.weight * adjustmentFactor * 100) / 100
+      }));
+
+      // Update the adjusted weights in database
+      for (const adjustment of adjustments) {
+        await supabase
+          .from('criteria')
+          .update({ weight: adjustment.newWeight })
+          .eq('id', adjustment.id);
+      }
+
+      toast({
+        title: "Bobot Disesuaikan",
+        description: `Bobot kriteria lain dalam kategori ${newCriterion.category} telah disesuaikan secara proporsional untuk mempertahankan total ${categoryTotal}%`,
+      });
+
+      return true;
     } catch (error) {
       console.error('Error auto-adjusting weights:', error);
       toast({
@@ -91,6 +109,7 @@ export const CriteriaManagement = ({ onCriteriaChange }: CriteriaManagementProps
         description: "Gagal menyesuaikan bobot otomatis",
         variant: "destructive",
       });
+      return false;
     }
   };
 
@@ -136,10 +155,20 @@ export const CriteriaManagement = ({ onCriteriaChange }: CriteriaManagementProps
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
-    if (formData.weight < 0 || formData.weight > 100) {
+    const categoryTotal = CATEGORY_TOTALS[formData.category as keyof typeof CATEGORY_TOTALS];
+    if (!categoryTotal) {
       toast({
         title: "Error",
-        description: "Bobot harus antara 0 dan 100",
+        description: "Kategori tidak valid",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    if (formData.weight < 0 || formData.weight > categoryTotal) {
+      toast({
+        title: "Error",
+        description: `Bobot harus antara 0 dan ${categoryTotal}% untuk kategori ${formData.category}`,
         variant: "destructive",
       });
       return;
@@ -157,6 +186,7 @@ export const CriteriaManagement = ({ onCriteriaChange }: CriteriaManagementProps
       };
 
       if (editingCriteria) {
+        // For editing, first update the criterion
         const { error } = await supabase
           .from('criteria')
           .update(criterionData)
@@ -164,14 +194,30 @@ export const CriteriaManagement = ({ onCriteriaChange }: CriteriaManagementProps
 
         if (error) throw error;
 
-        // Auto-adjust weights for edited criteria
-        await autoAdjustWeights({ ...criterionData, id: editingCriteria.id } as Criteria, true);
+        // Then auto-adjust weights for edited criteria
+        const adjustmentSuccess = await autoAdjustWeights({ ...criterionData, id: editingCriteria.id } as Criteria, true);
+        
+        if (!adjustmentSuccess) {
+          // Rollback the update if adjustment failed
+          await supabase
+            .from('criteria')
+            .update({
+              name: editingCriteria.name,
+              type: editingCriteria.type,
+              weight: editingCriteria.weight,
+              category: editingCriteria.category,
+              scale: editingCriteria.scale
+            })
+            .eq('id', editingCriteria.id);
+          return;
+        }
 
         toast({
           title: "Berhasil",
           description: "Kriteria berhasil diperbarui",
         });
       } else {
+        // For new criteria, first insert it
         const { data: newCriterion, error } = await supabase
           .from('criteria')
           .insert([criterionData])
@@ -180,9 +226,18 @@ export const CriteriaManagement = ({ onCriteriaChange }: CriteriaManagementProps
 
         if (error) throw error;
 
-        // Auto-adjust weights for new criteria
+        // Then auto-adjust weights for new criteria
         if (newCriterion) {
-          await autoAdjustWeights(newCriterion as Criteria);
+          const adjustmentSuccess = await autoAdjustWeights(newCriterion as Criteria);
+          
+          if (!adjustmentSuccess) {
+            // Delete the new criterion if adjustment failed
+            await supabase
+              .from('criteria')
+              .delete()
+              .eq('id', newCriterion.id);
+            return;
+          }
         }
 
         toast({
@@ -282,7 +337,7 @@ export const CriteriaManagement = ({ onCriteriaChange }: CriteriaManagementProps
   };
 
   // Calculate weight totals for display
-  const weightTotals = calculateTotalWeights(criteria);
+  const categoryTotals = calculateCategoryTotals(criteria);
 
   return (
     <div className="space-y-6">
@@ -323,9 +378,9 @@ export const CriteriaManagement = ({ onCriteriaChange }: CriteriaManagementProps
                         <SelectValue placeholder="Pilih kategori" />
                       </SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="A. Kinerja Inti">Kinerja Inti</SelectItem>
-                        <SelectItem value="B. Kedisiplinan">Kedisiplinan</SelectItem>
-                        <SelectItem value="C. Prestasi">Prestasi</SelectItem>
+                        <SelectItem value="A. Kinerja Inti">Kinerja Inti (Max: 60%)</SelectItem>
+                        <SelectItem value="B. Kedisiplinan">Kedisiplinan (Max: 25%)</SelectItem>
+                        <SelectItem value="C. Prestasi">Prestasi (Max: 15%)</SelectItem>
                       </SelectContent>
                     </Select>
                   </div>
@@ -348,18 +403,20 @@ export const CriteriaManagement = ({ onCriteriaChange }: CriteriaManagementProps
                       type="number"
                       step="0.01"
                       min="0"
-                      max="100"
+                      max={formData.category ? CATEGORY_TOTALS[formData.category as keyof typeof CATEGORY_TOTALS] : 100}
                       value={formData.weight}
                       onChange={(e) => setFormData(prev => ({ ...prev, weight: parseFloat(e.target.value) || 0 }))}
                       required
                     />
-                    {formData.category && formData.type && (
-                      <p className="text-sm text-gray-600 mt-1">
-                        Total bobot {formData.category} ({formData.type}): {
-                          (weightTotals[`${formData.category}-${formData.type}`] || 0) + 
-                          (editingCriteria ? formData.weight - editingCriteria.weight : formData.weight)
-                        }%
-                      </p>
+                    {formData.category && (
+                      <div className="text-sm mt-1">
+                        <p className="text-gray-600">
+                          Total saat ini {formData.category}: {categoryTotals[formData.category] || 0}%
+                        </p>
+                        <p className="text-green-600">
+                          Target kategori: {CATEGORY_TOTALS[formData.category as keyof typeof CATEGORY_TOTALS]}%
+                        </p>
+                      </div>
                     )}
                   </div>
                   <div>
@@ -389,23 +446,29 @@ export const CriteriaManagement = ({ onCriteriaChange }: CriteriaManagementProps
           {/* Weight Summary */}
           <div className="mb-6 p-4 bg-blue-50 rounded-lg">
             <h4 className="font-semibold mb-3 text-blue-800">Ringkasan Bobot per Kategori</h4>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {Object.entries(weightTotals).map(([key, total]) => {
-                const [category, type] = key.split('-');
-                const isOver = total > 100;
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              {Object.entries(CATEGORY_TOTALS).map(([category, targetTotal]) => {
+                const currentTotal = categoryTotals[category] || 0;
+                const isComplete = Math.abs(currentTotal - targetTotal) < 0.01;
                 return (
-                  <div key={key} className={`flex justify-between items-center p-2 rounded ${isOver ? 'bg-red-100 text-red-800' : 'bg-green-100 text-green-800'}`}>
-                    <span className="font-medium">{category} ({type})</span>
-                    <span className="flex items-center gap-1">
-                      {total.toFixed(2)}%
-                      {isOver && <AlertTriangle className="w-4 h-4" />}
-                    </span>
+                  <div key={category} className={`p-3 rounded border-2 ${isComplete ? 'border-green-300 bg-green-50' : 'border-yellow-300 bg-yellow-50'}`}>
+                    <div className="font-medium text-sm">{category.replace(/^[A-C]\.\s/, '')}</div>
+                    <div className="flex justify-between items-center mt-1">
+                      <span className="text-lg font-bold">{currentTotal.toFixed(1)}%</span>
+                      <span className="text-sm text-gray-600">/ {targetTotal}%</span>
+                    </div>
+                    <div className="w-full bg-gray-200 rounded-full h-2 mt-2">
+                      <div 
+                        className={`h-2 rounded-full ${isComplete ? 'bg-green-500' : 'bg-yellow-500'}`}
+                        style={{ width: `${Math.min((currentTotal / targetTotal) * 100, 100)}%` }}
+                      ></div>
+                    </div>
                   </div>
                 );
               })}
             </div>
-            <p className="text-sm text-blue-700 mt-2">
-              <strong>Catatan:</strong> Sistem akan otomatis menyesuaikan bobot kriteria lain dalam kategori yang sama jika total melebihi 100%
+            <p className="text-sm text-blue-700 mt-3">
+              <strong>Catatan:</strong> Sistem akan otomatis menyesuaikan bobot kriteria lain dalam kategori yang sama untuk mempertahankan total target masing-masing kategori
             </p>
           </div>
 
