@@ -336,7 +336,11 @@ const Index = () => {
           </TabsContent>
 
           <TabsContent value="input">
-            <EmployeeForm onAddEmployee={addEmployee} employees={employees} />
+            <EmployeeForm 
+              onAddEmployee={addEmployee} 
+              employees={employees}
+              criteriaUpdateTrigger={criteriaUpdateTrigger}
+            />
           </TabsContent>
 
           <TabsContent value="calculate">

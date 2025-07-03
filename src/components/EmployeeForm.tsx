@@ -10,17 +10,19 @@ import { UserPlus, User, Eye, Edit, Trash2 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { EditEmployeeDialog } from "@/components/EditEmployeeDialog";
-import type { Employee as DBEmployee, EmployeeEvaluation } from "@/types/database";
+import type { Employee as DBEmployee, EmployeeEvaluation, Criteria } from "@/types/database";
 import type { Employee, SAWResult } from "@/pages/Index";
 
 interface EmployeeFormProps {
   onAddEmployee: (employee: Employee) => void;
   employees: Employee[];
+  criteriaUpdateTrigger?: number;
 }
 
-export const EmployeeForm = ({ onAddEmployee, employees }: EmployeeFormProps) => {
+export const EmployeeForm = ({ onAddEmployee, employees, criteriaUpdateTrigger }: EmployeeFormProps) => {
   const [dbEmployees, setDbEmployees] = useState<DBEmployee[]>([]);
   const [evaluations, setEvaluations] = useState<EmployeeEvaluation[]>([]);
+  const [criteria, setCriteria] = useState<Criteria[]>([]);
   const [selectedEmployeeId, setSelectedEmployeeId] = useState<string>("");
   const [selectedEmployeeForDetail, setSelectedEmployeeForDetail] = useState<Employee | null>(null);
   const [selectedEmployeeForEdit, setSelectedEmployeeForEdit] = useState<Employee | null>(null);
@@ -29,7 +31,8 @@ export const EmployeeForm = ({ onAddEmployee, employees }: EmployeeFormProps) =>
   const [loading, setLoading] = useState(false);
   const { toast } = useToast();
   
-  const [formData, setFormData] = useState({
+  // Dynamic form data based on criteria
+  const [formData, setFormData] = useState<{ [key: string]: number }>({
     kualitasKerja: 1,
     tanggungJawab: 1,
     kuantitasKerja: 1,
@@ -44,6 +47,45 @@ export const EmployeeForm = ({ onAddEmployee, employees }: EmployeeFormProps) =>
     prestasi: 0,
     suratPeringatan: 0
   });
+
+  const fetchCriteria = async () => {
+    try {
+      const { data: criteriaData, error } = await supabase
+        .from('criteria')
+        .select('*')
+        .order('category', { ascending: true });
+      
+      if (error) {
+        console.error('Error fetching criteria:', error);
+        toast({
+          title: "Error",
+          description: "Gagal mengambil data kriteria",
+          variant: "destructive",
+        });
+      } else {
+        setCriteria(criteriaData || []);
+        console.log('EmployeeForm: Criteria loaded:', criteriaData?.length || 0);
+        
+        // Initialize form data with default values for all criteria
+        const newFormData: { [key: string]: number } = {};
+        (criteriaData || []).forEach(criterion => {
+          const fieldName = criterion.name.toLowerCase().replace(/\s+/g, '');
+          // Set default values based on criterion type
+          if (criterion.category === 'A. Kinerja Inti') {
+            newFormData[fieldName] = 1; // Default rating 1-5
+          } else if (criterion.category === 'B. Kedisiplinan') {
+            newFormData[fieldName] = 0; // Default count 0
+          } else if (criterion.category === 'C. Faktor Tambahan') {
+            newFormData[fieldName] = 0; // Default binary 0/1
+          }
+        });
+        
+        setFormData(prev => ({ ...prev, ...newFormData }));
+      }
+    } catch (error) {
+      console.error('Error fetching criteria:', error);
+    }
+  };
 
   const fetchEmployees = async () => {
     setLoading(true);
@@ -101,6 +143,11 @@ export const EmployeeForm = ({ onAddEmployee, employees }: EmployeeFormProps) =>
     }
   };
 
+  // Reload criteria when criteriaUpdateTrigger changes
+  useEffect(() => {
+    fetchCriteria();
+  }, [criteriaUpdateTrigger]);
+
   // Auto-refresh evaluations when employees prop changes
   useEffect(() => {
     fetchEvaluations();
@@ -109,6 +156,7 @@ export const EmployeeForm = ({ onAddEmployee, employees }: EmployeeFormProps) =>
   useEffect(() => {
     fetchEmployees();
     fetchEvaluations();
+    fetchCriteria();
   }, []);
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -284,6 +332,15 @@ export const EmployeeForm = ({ onAddEmployee, employees }: EmployeeFormProps) =>
   console.log('Total DB employees:', dbEmployees.length);
   console.log('Total evaluations:', evaluations.length);
 
+  // Group criteria by category for dynamic form rendering
+  const groupedCriteria = criteria.reduce((acc, criterion) => {
+    if (!acc[criterion.category]) {
+      acc[criterion.category] = [];
+    }
+    acc[criterion.category].push(criterion);
+    return acc;
+  }, {} as { [key: string]: Criteria[] });
+
   return (
     <div className="space-y-6">
       {/* Current Employees */}
@@ -453,6 +510,11 @@ export const EmployeeForm = ({ onAddEmployee, employees }: EmployeeFormProps) =>
           <CardTitle className="flex items-center gap-2 text-green-700">
             <UserPlus className="w-5 h-5" />
             Tambah Evaluasi Karyawan Baru
+            {criteria.length > 0 && (
+              <Badge variant="secondary" className="ml-2">
+                {criteria.length} Kriteria Dimuat
+              </Badge>
+            )}
           </CardTitle>
         </CardHeader>
         <CardContent>
@@ -490,166 +552,39 @@ export const EmployeeForm = ({ onAddEmployee, employees }: EmployeeFormProps) =>
               </p>
             </div>
 
-            {selectedEmployeeId && (
+            {selectedEmployeeId && criteria.length > 0 && (
               <>
-                {/* Performance Criteria */}
-                <div className="space-y-4">
-                  <h3 className="text-lg font-semibold text-gray-800">A. Kinerja Inti (Skala 1-5)</h3>
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div>
-                      <Label htmlFor="kualitasKerja">Kualitas Kerja</Label>
-                      <Input
-                        id="kualitasKerja"
-                        type="number"
-                        min="1"
-                        max="5"
-                        value={formData.kualitasKerja}
-                        onChange={(e) => handleInputChange("kualitasKerja", parseInt(e.target.value))}
-                      />
-                    </div>
-                    <div>
-                      <Label htmlFor="tanggungJawab">Tanggung Jawab</Label>
-                      <Input
-                        id="tanggungJawab"
-                        type="number"
-                        min="1"
-                        max="5"
-                        value={formData.tanggungJawab}
-                        onChange={(e) => handleInputChange("tanggungJawab", parseInt(e.target.value))}
-                      />
-                    </div>
-                    <div>
-                      <Label htmlFor="kuantitasKerja">Kuantitas Kerja</Label>
-                      <Input
-                        id="kuantitasKerja"
-                        type="number"
-                        min="1"
-                        max="5"
-                        value={formData.kuantitasKerja}
-                        onChange={(e) => handleInputChange("kuantitasKerja", parseInt(e.target.value))}
-                      />
-                    </div>
-                    <div>
-                      <Label htmlFor="pemahamanTugas">Pemahaman Tugas</Label>
-                      <Input
-                        id="pemahamanTugas"
-                        type="number"
-                        min="1"
-                        max="5"
-                        value={formData.pemahamanTugas}
-                        onChange={(e) => handleInputChange("pemahamanTugas", parseInt(e.target.value))}
-                      />
-                    </div>
-                    <div>
-                      <Label htmlFor="inisiatif">Inisiatif</Label>
-                      <Input
-                        id="inisiatif"
-                        type="number"
-                        min="1"
-                        max="5"
-                        value={formData.inisiatif}
-                        onChange={(e) => handleInputChange("inisiatif", parseInt(e.target.value))}
-                      />
-                    </div>
-                    <div>
-                      <Label htmlFor="kerjasama">Kerjasama</Label>
-                      <Input
-                        id="kerjasama"
-                        type="number"
-                        min="1"
-                        max="5"
-                        value={formData.kerjasama}
-                        onChange={(e) => handleInputChange("kerjasama", parseInt(e.target.value))}
-                      />
+                {/* Dynamic form based on criteria from database */}
+                {Object.entries(groupedCriteria).map(([category, criteriaList]) => (
+                  <div key={category} className="space-y-4">
+                    <h3 className="text-lg font-semibold text-gray-800">{category}</h3>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      {criteriaList.map((criterion) => {
+                        const fieldName = criterion.name.toLowerCase().replace(/\s+/g, '');
+                        const currentValue = formData[fieldName] || 0;
+                        
+                        return (
+                          <div key={criterion.id}>
+                            <Label htmlFor={fieldName}>
+                              {criterion.name} ({criterion.scale})
+                            </Label>
+                            <Input
+                              id={fieldName}
+                              type="number"
+                              min={criterion.category === 'A. Kinerja Inti' ? "1" : "0"}
+                              max={criterion.scale.includes('1-5') ? "5" : criterion.scale.includes('0-1') ? "1" : "10"}
+                              value={currentValue}
+                              onChange={(e) => handleInputChange(fieldName as keyof typeof formData, parseInt(e.target.value) || 0)}
+                            />
+                            <p className="text-xs text-gray-500 mt-1">
+                              Bobot: {criterion.weight}% | Tipe: {criterion.type}
+                            </p>
+                          </div>
+                        );
+                      })}
                     </div>
                   </div>
-                </div>
-
-                {/* Discipline Criteria */}
-                <div className="space-y-4">
-                  <h3 className="text-lg font-semibold text-gray-800">B. Kedisiplinan</h3>
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div>
-                      <Label htmlFor="hariAlpa">Jumlah Hari Alpa</Label>
-                      <Input
-                        id="hariAlpa"
-                        type="number"
-                        min="0"
-                        value={formData.hariAlpa}
-                        onChange={(e) => handleInputChange("hariAlpa", parseInt(e.target.value))}
-                      />
-                    </div>
-                    <div>
-                      <Label htmlFor="keterlambatan">Jumlah Keterlambatan</Label>
-                      <Input
-                        id="keterlambatan"
-                        type="number"
-                        min="0"
-                        value={formData.keterlambatan}
-                        onChange={(e) => handleInputChange("keterlambatan", parseInt(e.target.value))}
-                      />
-                    </div>
-                    <div>
-                      <Label htmlFor="hariIzin">Jumlah Hari Izin</Label>
-                      <Input
-                        id="hariIzin"
-                        type="number"
-                        min="0"
-                        value={formData.hariIzin}
-                        onChange={(e) => handleInputChange("hariIzin", parseInt(e.target.value))}
-                      />
-                    </div>
-                    <div>
-                      <Label htmlFor="hariSakit">Jumlah Hari Sakit</Label>
-                      <Input
-                        id="hariSakit"
-                        type="number"
-                        min="0"
-                        value={formData.hariSakit}
-                        onChange={(e) => handleInputChange("hariSakit", parseInt(e.target.value))}
-                      />
-                    </div>
-                    <div>
-                      <Label htmlFor="pulangCepat">Pulang Cepat</Label>
-                      <Input
-                        id="pulangCepat"
-                        type="number"
-                        min="0"
-                        value={formData.pulangCepat}
-                        onChange={(e) => handleInputChange("pulangCepat", parseInt(e.target.value))}
-                      />
-                    </div>
-                  </div>
-                </div>
-
-                {/* Additional Factors */}
-                <div className="space-y-4">
-                  <h3 className="text-lg font-semibold text-gray-800">C. Faktor Tambahan</h3>
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div>
-                      <Label htmlFor="prestasi">Prestasi (0=Tidak, 1=Ada)</Label>
-                      <Input
-                        id="prestasi"
-                        type="number"
-                        min="0"
-                        max="1"
-                        value={formData.prestasi}
-                        onChange={(e) => handleInputChange("prestasi", parseInt(e.target.value))}
-                      />
-                    </div>
-                    <div>
-                      <Label htmlFor="suratPeringatan">Surat Peringatan (0=Tidak, 1=Ada)</Label>
-                      <Input
-                        id="suratPeringatan"
-                        type="number"
-                        min="0"
-                        max="1"
-                        value={formData.suratPeringatan}
-                        onChange={(e) => handleInputChange("suratPeringatan", parseInt(e.target.value))}
-                      />
-                    </div>
-                  </div>
-                </div>
+                ))}
 
                 <Button 
                   type="submit" 
@@ -660,6 +595,12 @@ export const EmployeeForm = ({ onAddEmployee, employees }: EmployeeFormProps) =>
                   {loading ? "Menyimpan..." : "Tambah Evaluasi Karyawan"}
                 </Button>
               </>
+            )}
+
+            {selectedEmployeeId && criteria.length === 0 && (
+              <div className="text-center py-8">
+                <p className="text-gray-500">Belum ada kriteria yang didefinisikan. Silakan tambahkan kriteria terlebih dahulu.</p>
+              </div>
             )}
           </form>
         </CardContent>
