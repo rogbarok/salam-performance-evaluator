@@ -323,9 +323,9 @@ export const CriteriaManagement = ({ onCriteriaChange }: CriteriaManagementProps
                         <SelectValue placeholder="Pilih kategori" />
                       </SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="Kinerja Inti">Kinerja Inti</SelectItem>
-                        <SelectItem value="Kedisiplinan">Kedisiplinan</SelectItem>
-                        <SelectItem value="Prestasi">Prestasi</SelectItem>
+                        <SelectItem value="A. Kinerja Inti">Kinerja Inti</SelectItem>
+                        <SelectItem value="B. Kedisiplinan">Kedisiplinan</SelectItem>
+                        <SelectItem value="C. Prestasi">Prestasi</SelectItem>
                       </SelectContent>
                     </Select>
                   </div>
