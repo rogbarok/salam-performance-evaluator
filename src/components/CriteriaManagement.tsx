@@ -113,6 +113,66 @@ export const CriteriaManagement = ({ onCriteriaChange }: CriteriaManagementProps
     }
   };
 
+  // Auto-adjust weights when criteria is deleted
+  const autoAdjustAfterDeletion = async (deletedCriterion: Criteria) => {
+    try {
+      const categoryTotal = CATEGORY_TOTALS[deletedCriterion.category as keyof typeof CATEGORY_TOTALS];
+      if (!categoryTotal) {
+        console.warn('No fixed total defined for category:', deletedCriterion.category);
+        return;
+      }
+
+      // Get remaining criteria in the same category
+      const remainingCriteria = criteria.filter(c => 
+        c.category === deletedCriterion.category && 
+        c.id !== deletedCriterion.id
+      );
+
+      if (remainingCriteria.length === 0) {
+        // No remaining criteria in this category
+        return;
+      }
+
+      const currentTotalWeight = remainingCriteria.reduce((sum, c) => sum + c.weight, 0);
+      
+      if (currentTotalWeight === 0) {
+        // Distribute weight equally among remaining criteria
+        const equalWeight = categoryTotal / remainingCriteria.length;
+        
+        for (const criterion of remainingCriteria) {
+          await supabase
+            .from('criteria')
+            .update({ weight: equalWeight })
+            .eq('id', criterion.id);
+        }
+      } else {
+        // Adjust proportionally to reach category total
+        const adjustmentFactor = categoryTotal / currentTotalWeight;
+        
+        for (const criterion of remainingCriteria) {
+          const newWeight = Math.round(criterion.weight * adjustmentFactor * 100) / 100;
+          await supabase
+            .from('criteria')
+            .update({ weight: newWeight })
+            .eq('id', criterion.id);
+        }
+      }
+
+      toast({
+        title: "Bobot Disesuaikan",
+        description: `Bobot kriteria dalam kategori ${deletedCriterion.category} telah disesuaikan untuk mempertahankan total ${categoryTotal}%`,
+      });
+
+    } catch (error) {
+      console.error('Error auto-adjusting weights after deletion:', error);
+      toast({
+        title: "Peringatan",
+        description: "Gagal menyesuaikan bobot setelah penghapusan",
+        variant: "destructive",
+      });
+    }
+  };
+
   const fetchCriteria = async () => {
     setLoading(true);
     try {
@@ -281,6 +341,10 @@ export const CriteriaManagement = ({ onCriteriaChange }: CriteriaManagementProps
   const handleDelete = async (id: string) => {
     if (!confirm('Apakah Anda yakin ingin menghapus kriteria ini?')) return;
 
+    // Find the criterion to be deleted for auto-adjustment
+    const criterionToDelete = criteria.find(c => c.id === id);
+    if (!criterionToDelete) return;
+
     setLoading(true);
     try {
       const { error } = await supabase
@@ -289,6 +353,9 @@ export const CriteriaManagement = ({ onCriteriaChange }: CriteriaManagementProps
         .eq('id', id);
 
       if (error) throw error;
+
+      // Auto-adjust weights after deletion
+      await autoAdjustAfterDeletion(criterionToDelete);
 
       toast({
         title: "Berhasil",
@@ -380,7 +447,7 @@ export const CriteriaManagement = ({ onCriteriaChange }: CriteriaManagementProps
                       <SelectContent>
                         <SelectItem value="A. Kinerja Inti">Kinerja Inti (Max: 60%)</SelectItem>
                         <SelectItem value="B. Kedisiplinan">Kedisiplinan (Max: 25%)</SelectItem>
-                        <SelectItem value="C. Prestasi">Prestasi (Max: 15%)</SelectItem>
+                        <SelectItem value="C. Faktor Tambahan">Faktor Tambahan (Max: 15%)</SelectItem>
                       </SelectContent>
                     </Select>
                   </div>
