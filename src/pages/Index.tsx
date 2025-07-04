@@ -32,8 +32,8 @@ export interface Employee {
   pulangCepat: number;
   prestasi: number;
   suratPeringatan: number;
-  // Dynamic properties for new criteria
-  [key: string]: any;
+  // Dynamic properties for new criteria - changed from any to number
+  [key: string]: number | string;
 }
 
 export interface SAWResult {
@@ -435,7 +435,6 @@ const Index = () => {
         </Tabs>
       </div>
     </div>
-  )
   );
 };
 
