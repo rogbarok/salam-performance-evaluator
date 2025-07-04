@@ -225,7 +225,10 @@ const Index = () => {
               break;
             // Kriteria baru akan ditambahkan sebagai properti dinamis
             default:
-              employee[score.criteria.name] = score.score;
+              // Add type check to ensure criteria name is a string before using as property key
+              if (typeof score.criteria.name === 'string' && score.criteria.name) {
+                employee[score.criteria.name] = score.score;
+              }
               break;
           }
         });
@@ -432,7 +435,6 @@ const Index = () => {
         </Tabs>
       </div>
     </div>
-  )
   );
 };
 
