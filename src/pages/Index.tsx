@@ -279,12 +279,22 @@ const Index = () => {
     loadDataFromDatabase();
   };
 
+  const handleEmployeeUpdate = () => {
+    console.log('Employee data updated, refreshing...');
+    // Reload data to refresh employee list
+    loadDataFromDatabase();
+  };
+
   useEffect(() => {
     loadDataFromDatabase();
   }, []);
 
   const addEmployee = (employee: Employee) => {
     setEmployees(prev => [...prev, employee]);
+    // Trigger data reload to ensure consistency
+    setTimeout(() => {
+      loadDataFromDatabase();
+    }, 500);
   };
 
   const calculateResults = (sawResults: SAWResult[]) => {
@@ -370,7 +380,7 @@ const Index = () => {
                   <p className="text-2xl font-bold text-gray-900">
                     {results.filter(r => r.convertedScore < 3).length}
                   </p>
-                  <p className="text-xs text-gray-500">Skor &lt; 3</p>
+                  <p className="text-xs text-gray-500">Skor < 3</p>
                 </div>
               </div>
             </CardContent>
@@ -404,6 +414,7 @@ const Index = () => {
               onAddEmployee={addEmployee} 
               employees={employees}
               criteriaUpdateTrigger={criteriaUpdateTrigger}
+              onEmployeeUpdate={handleEmployeeUpdate}
             />
           </TabsContent>
 
