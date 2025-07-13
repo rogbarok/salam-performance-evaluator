@@ -226,7 +226,7 @@ export const ResultsDisplay = ({ results }: ResultsDisplayProps) => {
                     <td><strong>${result.employee.name}</strong></td>
                     <td>${result.finalScore.toFixed(4)}</td>
                     <td><span class="badge ${result.convertedScore >= 4 ? 'badge-success' : result.convertedScore >= 3 ? 'badge-warning' : 'badge-danger'}">${result.convertedScore.toFixed(1)}</span></td>
-                    <td>${result.convertedScore >= 4.5 ? "Sangat Baik" : result.convertedScore >= 3.5 ? "Baik" : result.convertedScore >= 2.5 ? "Cukup" : result.convertedScore >= 1.5 ? "Kurang" : "Sangat Kurang"}</td>
+                    <td>${result.convertedScore === 5 ? "Baik Sekali" : result.convertedScore > 4 && result.convertedScore < 5 ? "Baik" : result.convertedScore > 3 && result.convertedScore <= 4 ? "Cukup" : result.convertedScore > 2 && result.convertedScore <= 3 ? "Kurang" : result.convertedScore >= 0 && result.convertedScore <= 2 ? "Kurang Sekali" : "Tidak Valid"}</td>
                     <td><span class="badge ${result.recommendation === "Dapat diperpanjang" ? 'badge-success' : 'badge-danger'}">${result.recommendation}</span></td>
                     <td>${result.note ? `<span class="badge ${result.note === "Kandidat promosi" ? 'badge-success' : 'badge-danger'}">${result.note}</span>` : '-'}</td>
                   </tr>
@@ -434,10 +434,11 @@ export const ResultsDisplay = ({ results }: ResultsDisplayProps) => {
                     </td>
                     <td className="py-4 px-4 text-center">
                       <span className="text-sm text-gray-600">
-                        {result.convertedScore >= 4.5 ? "Sangat Baik" :
-                         result.convertedScore >= 3.5 ? "Baik" :
-                         result.convertedScore >= 2.5 ? "Cukup" :
-                         result.convertedScore >= 1.5 ? "Kurang" : "Sangat Kurang"}
+                        {result.convertedScore === 5 ? "Baik Sekali" :
+                         result.convertedScore > 4 && result.convertedScore < 5 ? "Baik" :
+                         result.convertedScore > 3 && result.convertedScore <= 4 ? "Cukup" :
+                         result.convertedScore > 2 && result.convertedScore <= 3 ? "Kurang" :
+                         result.convertedScore >= 0 && result.convertedScore <= 2 ? "Kurang Sekali" : "Tidak Valid"}
                       </span>
                     </td>
                     <td className="py-4 px-4">

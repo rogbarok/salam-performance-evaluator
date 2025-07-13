@@ -705,14 +705,18 @@ export const SAWCalculator = ({ employees, onCalculate, criteriaUpdateTrigger }:
   };
 
   const getScoreLabel = (score: number): string => {
-    if (score >= 4) {
-      return "Sangat Baik";
-    } else if (score >= 3) {
+    if (score === 5) {
+      return "Baik Sekali";
+    } else if (score > 4 && score < 5) {
       return "Baik";
-    } else if (score >= 2) {
+    } else if (score > 3 && score <= 4) {
       return "Cukup";
-    } else {
+    } else if (score > 2 && score <= 3) {
       return "Kurang";
+    } else if (score >= 0 && score <= 2) {
+      return "Kurang Sekali";
+    } else {
+      return "Tidak Valid";
     }
   };
 
